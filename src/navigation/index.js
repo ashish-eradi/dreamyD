@@ -18,6 +18,9 @@ import WelcomeScreen from '../screens/Onboarding/Welcome';
 import WakeTimePickerScreen from '../screens/Onboarding/WakeTimePicker';
 import NotificationPermissionScreen from '../screens/Onboarding/NotificationPermission';
 
+// Auth
+import { SignUpScreen, SignInScreen } from '../screens/Auth';
+
 // Main tabs
 import HomeScreen from '../screens/Home';
 import TimelineScreen from '../screens/Timeline';
@@ -193,14 +196,10 @@ function OnboardingNavigator() {
       }}
     >
       <OnboardingStack.Screen name="Welcome" component={WelcomeScreen} />
-      <OnboardingStack.Screen
-        name="WakeTimePicker"
-        component={WakeTimePickerScreen}
-      />
-      <OnboardingStack.Screen
-        name="NotificationPermission"
-        component={NotificationPermissionScreen}
-      />
+      <OnboardingStack.Screen name="WakeTimePicker" component={WakeTimePickerScreen} />
+      <OnboardingStack.Screen name="NotificationPermission" component={NotificationPermissionScreen} />
+      <OnboardingStack.Screen name="SignUp" component={SignUpScreen} />
+      <OnboardingStack.Screen name="SignIn" component={SignInScreen} />
     </OnboardingStack.Navigator>
   );
 }
