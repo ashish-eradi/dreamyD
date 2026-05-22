@@ -1,0 +1,96 @@
+{
+  "expo": {
+    "name": "DreamDiary",
+    "slug": "dreamdiary",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0D0D1A"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.dreamdiary.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "DreamDiary needs microphone access to record your dream narratives.",
+        "NSPhotoLibraryUsageDescription": "DreamDiary needs access to your photo library to attach images to dreams.",
+        "NSPhotoLibraryAddUsageDescription": "DreamDiary needs permission to save dream visualizations to your photo library.",
+        "NSCameraUsageDescription": "DreamDiary needs camera access to capture images for your dream journal.",
+        "UIBackgroundModes": [
+          "audio",
+          "fetch",
+          "remote-notification"
+        ]
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#0D0D1A"
+      },
+      "package": "com.dreamdiary.app",
+      "permissions": [
+        "RECORD_AUDIO",
+        "RECEIVE_BOOT_COMPLETED",
+        "VIBRATE",
+        "READ_MEDIA_IMAGES",
+        "WRITE_EXTERNAL_STORAGE",
+        "READ_EXTERNAL_STORAGE",
+        "CAMERA",
+        "POST_NOTIFICATIONS"
+      ],
+      "googleServicesFile": "./google-services.json"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "Allow DreamDiary to access your microphone to record dream narratives."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#7B5EA7",
+          "defaultChannel": "dreamreminders",
+          "sounds": []
+        }
+      ],
+      [
+        "expo-secure-store"
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow DreamDiary to access your photos.",
+          "savePhotosPermission": "Allow DreamDiary to save photos.",
+          "isAccessMediaLocationEnabled": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow DreamDiary to access your photos for dream imagery.",
+          "cameraPermission": "Allow DreamDiary to use the camera."
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "your-eas-project-id"
+      }
+    },
+    "owner": "dreamdiary"
+  }
+}
