@@ -1,55 +1,42 @@
 // =============================================================================
-// DreamDiary — EmotionChip component
+// DreamDiary V3 — EmotionChip component
 // =============================================================================
-// A colored pill badge that displays an emotion label and optional confidence.
+// A colored pill badge displaying an emotion label with a colored dot.
 //
 // Props:
-//   emotion    {string}            — emotion label (e.g. "joy", "fear")
-//   confidence {number}            — 0–1 confidence score (optional)
-//   size       {'sm' | 'md'}       — controls padding + font size (default 'sm')
+//   mood  {string}        — mood key (e.g. 'joy', 'fear', 'calm') OR label
+//   size  {'sm' | 'md'}   — controls padding + font size (default 'sm')
 // =============================================================================
 
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { getEmotionColor } from '../utils';
+import { getMoodStyle } from '../constants/theme';
 
 // =============================================================================
 // Component
 // =============================================================================
 
-export default function EmotionChip({ emotion, confidence, size = 'sm' }) {
-  if (!emotion) return null;
+export default function EmotionChip({ mood, size = 'sm' }) {
+  if (!mood) return null;
 
-  const color = getEmotionColor(emotion);
+  const style = getMoodStyle(mood);
   const isMd  = size === 'md';
-
-  const label =
-    emotion.charAt(0).toUpperCase() + emotion.slice(1).toLowerCase();
-
-  const showConfidence =
-    typeof confidence === 'number' && confidence > 0 && confidence <= 1;
 
   return (
     <View
       style={[
         styles.chip,
         isMd ? styles.chipMd : styles.chipSm,
-        {
-          backgroundColor: `${color}22`,
-          borderColor:     `${color}55`,
-        },
+        { backgroundColor: style.bg },
       ]}
-      accessibilityLabel={
-        `Emotion: ${label}` +
-        (showConfidence ? `, ${Math.round(confidence * 100)}% confidence` : '')
-      }
+      accessibilityLabel={`Mood: ${style.label}`}
     >
-      {/* Color dot */}
+      {/* Colored dot */}
       <View
         style={[
           styles.dot,
           isMd ? styles.dotMd : styles.dotSm,
-          { backgroundColor: color },
+          { backgroundColor: style.color },
         ]}
       />
 
@@ -58,25 +45,12 @@ export default function EmotionChip({ emotion, confidence, size = 'sm' }) {
         style={[
           styles.label,
           isMd ? styles.labelMd : styles.labelSm,
-          { color },
+          { color: style.color },
         ]}
         numberOfLines={1}
       >
-        {label}
+        {style.label}
       </Text>
-
-      {/* Optional confidence percentage */}
-      {showConfidence && (
-        <Text
-          style={[
-            styles.confidence,
-            isMd ? styles.confidenceMd : styles.confidenceSm,
-            { color: `${color}BB` },
-          ]}
-        >
-          {Math.round(confidence * 100)}%
-        </Text>
-      )}
     </View>
   );
 }
@@ -87,26 +61,25 @@ export default function EmotionChip({ emotion, confidence, size = 'sm' }) {
 
 const styles = StyleSheet.create({
   chip: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    borderWidth:    1,
-    borderRadius:   20,
-    alignSelf:      'flex-start',
+    flexDirection: 'row',
+    alignItems:    'center',
+    borderRadius:  20,
+    alignSelf:     'flex-start',
   },
 
-  // ── Size variants ────────────────────────────────────────────────────────────
+  // ── Size variants ─────────────────────────────────────────────────────────
   chipSm: {
-    paddingHorizontal: 9,
+    paddingHorizontal: 10,
     paddingVertical:   4,
-    gap:               5,
-  },
-  chipMd: {
-    paddingHorizontal: 12,
-    paddingVertical:   6,
     gap:               6,
   },
+  chipMd: {
+    paddingHorizontal: 13,
+    paddingVertical:   6,
+    gap:               7,
+  },
 
-  // ── Dot ─────────────────────────────────────────────────────────────────────
+  // ── Dot ───────────────────────────────────────────────────────────────────
   dot: {
     borderRadius: 50,
   },
@@ -119,26 +92,15 @@ const styles = StyleSheet.create({
     height: 8,
   },
 
-  // ── Label ───────────────────────────────────────────────────────────────────
+  // ── Label ─────────────────────────────────────────────────────────────────
   label: {
-    fontWeight:    '600',
+    fontWeight:    '500',
     letterSpacing: 0.1,
   },
   labelSm: {
-    fontSize: 12,
+    fontSize: 13,
   },
   labelMd: {
-    fontSize: 14,
-  },
-
-  // ── Confidence ──────────────────────────────────────────────────────────────
-  confidence: {
-    fontWeight: '500',
-  },
-  confidenceSm: {
-    fontSize: 11,
-  },
-  confidenceMd: {
-    fontSize: 12,
+    fontSize: 15,
   },
 });

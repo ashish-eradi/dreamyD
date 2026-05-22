@@ -1,11 +1,11 @@
 // =============================================================================
-// DreamDiary — HomeScreen
+// DreamDiary V3 — HomeScreen (Today)
 // =============================================================================
-// MVP core screen: greeting, streak, last-dream preview, large record button,
-// and premium feature teasers (Dreamscape Map, Pattern Analysis).
+// Warm paper / cream aesthetic. Sections: header, streak card, last night,
+// weekly insight teaser, and tonight's rituals.
 // =============================================================================
 
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,409 +13,317 @@ import {
   ScrollView,
   StyleSheet,
   StatusBar,
-  Dimensions,
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withRepeat,
   withSequence,
   withTiming,
-  withDelay,
-  withSpring,
   Easing,
-  interpolate,
   FadeIn,
   FadeInDown,
-  FadeInUp,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useDreamStore } from '../../store';
 import { getDreams } from '../../services/supabase';
-import {
-  formatDate,
-  getDreamStreak,
-  getTopEmotion,
-  getTopSymbols,
-  getEmotionColor,
-  truncateText,
-} from '../../utils';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
-
-const COLORS = {
-  bg: '#0D0D1A',
-  card: '#1A1A2E',
-  primary: '#7B5EA7',
-  accent: '#C084FC',
-  gold: '#F59E0B',
-  text: '#F1F0FF',
-  muted: '#8B8BAE',
-  success: '#10B981',
-};
-
-const EMOTION_COLORS = {
-  joy: '#F59E0B',
-  fear: '#EF4444',
-  peace: '#10B981',
-  sadness: '#3B82F6',
-  confusion: '#8B5CF6',
-};
+import { formatDate, getDreamStreak, getTopEmotion, getTopSymbols } from '../../utils';
+import { COLORS, getMoodStyle, getSymbolStyle } from '../../constants/theme';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'Good morning';
-  if (hour < 17) return 'Good afternoon';
+  const h = new Date().getHours();
+  if (h < 12) return 'Good morning';
+  if (h < 17) return 'Good afternoon';
   return 'Good evening';
 }
 
-// ─── PulseRing ────────────────────────────────────────────────────────────────
-function PulseRing({ delay, size, color }) {
-  const scale = useSharedValue(1);
-  const opacity = useSharedValue(0.6);
-
-  useEffect(() => {
-    scale.value = withDelay(
-      delay,
-      withRepeat(
-        withSequence(
-          withTiming(1, { duration: 0 }),
-          withTiming(2.2, { duration: 1800, easing: Easing.out(Easing.ease) }),
-        ),
-        -1,
-        false
-      )
-    );
-    opacity.value = withDelay(
-      delay,
-      withRepeat(
-        withSequence(
-          withTiming(0.45, { duration: 0 }),
-          withTiming(0, { duration: 1800, easing: Easing.out(Easing.ease) }),
-        ),
-        -1,
-        false
-      )
-    );
-  }, []);
-
-  const style = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View
-      style={[
-        styles.pulseRing,
-        {
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          borderColor: color,
-        },
-        style,
-      ]}
-    />
-  );
+function formatShortDayDate(date) {
+  return date.toLocaleDateString('en-US', {
+    weekday: 'long',
+    month:   'long',
+    day:     'numeric',
+  });
 }
 
-// ─── RecordButton ─────────────────────────────────────────────────────────────
-function RecordButton({ onPress }) {
-  const breathScale = useSharedValue(1);
-  const tapScale = useSharedValue(1);
+// ─── StreakMoon (pulsing gradient circle) ─────────────────────────────────────
+
+function StreakMoon() {
+  const pulse = useSharedValue(1);
 
   useEffect(() => {
-    breathScale.value = withRepeat(
+    pulse.value = withRepeat(
       withSequence(
-        withTiming(1.06, { duration: 1600, easing: Easing.inOut(Easing.sine) }),
-        withTiming(1.0, { duration: 1600, easing: Easing.inOut(Easing.sine) }),
+        withTiming(1.12, { duration: 1400, easing: Easing.inOut(Easing.sine) }),
+        withTiming(0.96, { duration: 1400, easing: Easing.inOut(Easing.sine) }),
       ),
       -1,
       false
     );
   }, []);
 
-  const handlePress = useCallback(() => {
-    tapScale.value = withSpring(0.92, { damping: 12 }, () => {
-      tapScale.value = withSpring(1, { damping: 12 });
-    });
-    onPress?.();
-  }, [onPress]);
-
-  const buttonStyle = useAnimatedStyle(() => ({
-    transform: [
-      { scale: breathScale.value * tapScale.value },
-    ],
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: pulse.value }],
   }));
 
   return (
-    <View style={styles.recordSection}>
-      {/* Pulse rings layered behind */}
-      <View style={styles.pulseContainer}>
-        <PulseRing delay={0} size={100} color={COLORS.accent} />
-        <PulseRing delay={600} size={100} color={COLORS.primary} />
-        <PulseRing delay={1200} size={100} color={COLORS.accent} />
-      </View>
-
-      <Animated.View style={buttonStyle}>
-        <TouchableOpacity
-          activeOpacity={0.9}
-          onPress={handlePress}
-          accessibilityRole="button"
-          accessibilityLabel="Record your dream"
-          style={styles.recordButtonOuter}
-        >
-          <LinearGradient
-            colors={['#7B5EA7', '#C084FC', '#A78BFA']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.recordButtonGradient}
-          >
-            <Text style={styles.micIcon}>🎙</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      </Animated.View>
-
-      <Text style={styles.recordLabel}>Record Dream</Text>
-    </View>
-  );
-}
-
-// ─── StreakCard ───────────────────────────────────────────────────────────────
-function StreakCard({ streak }) {
-  const flameScale = useSharedValue(1);
-
-  useEffect(() => {
-    flameScale.value = withRepeat(
-      withSequence(
-        withTiming(1.15, { duration: 700, easing: Easing.inOut(Easing.sine) }),
-        withTiming(0.95, { duration: 700, easing: Easing.inOut(Easing.sine) }),
-      ),
-      -1,
-      false
-    );
-  }, []);
-
-  const flameStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: flameScale.value }],
-  }));
-
-  return (
-    <Animated.View entering={FadeInDown.delay(200).duration(450)} style={styles.streakCard}>
+    <Animated.View style={[styles.streakMoonWrap, animStyle]}>
       <LinearGradient
-        colors={['rgba(245,158,11,0.15)', 'rgba(26,26,46,0.95)']}
-        style={styles.streakCardInner}
+        colors={[COLORS.peach, COLORS.gold]}
+        start={{ x: 0.2, y: 0 }}
+        end={{ x: 0.8, y: 1 }}
+        style={styles.streakMoonCircle}
       >
-        <Animated.Text style={[styles.streakFlame, flameStyle]}>🔥</Animated.Text>
-        <View style={styles.streakTextGroup}>
-          <Text style={styles.streakCount}>
-            <Text style={styles.streakNumber}>{streak}</Text>
-            {' '}day streak
-          </Text>
-          <Text style={styles.streakSub}>Keep recording every morning!</Text>
-        </View>
-        <View style={styles.streakBadge}>
-          <Text style={styles.streakBadgeText}>{streak > 0 ? '🏆' : '💤'}</Text>
-        </View>
+        <Text style={styles.streakMoonIcon}>☾</Text>
       </LinearGradient>
     </Animated.View>
   );
 }
 
-// ─── EmotionChip ──────────────────────────────────────────────────────────────
-function EmotionChip({ label }) {
-  const color = getEmotionColor(label);
+// ─── StreakCard ───────────────────────────────────────────────────────────────
+
+function StreakCard({ streak }) {
+  // 7 dots: 6 moss (recorded nights) + 1 peach (today / current)
+  const dots = [true, true, true, true, true, true, false];
+
   return (
-    <View style={[styles.emotionChip, { backgroundColor: color + '28', borderColor: color + '60' }]}>
-      <Text style={[styles.emotionChipText, { color }]}>
-        {label.charAt(0).toUpperCase() + label.slice(1)}
+    <Animated.View entering={FadeInDown.delay(100).duration(400)} style={styles.card}>
+      <View style={styles.streakRow}>
+        <StreakMoon />
+        <View style={styles.streakText}>
+          <Text style={styles.streakTitle}>
+            <Text style={styles.streakNum}>{streak}</Text>
+            {'-night streak'}
+          </Text>
+          <Text style={styles.streakSub}>Recall up 23% this month</Text>
+        </View>
+      </View>
+      <View style={styles.streakDots}>
+        {dots.map((isMoss, i) => (
+          <View
+            key={i}
+            style={[
+              styles.streakDot,
+              { backgroundColor: isMoss ? COLORS.moss : COLORS.peach },
+            ]}
+          />
+        ))}
+      </View>
+    </Animated.View>
+  );
+}
+
+// ─── MoodPill ─────────────────────────────────────────────────────────────────
+
+function MoodPill({ moodKey }) {
+  const mood = getMoodStyle(moodKey);
+  return (
+    <View style={[styles.moodPill, { backgroundColor: mood.bg }]}>
+      <View style={[styles.moodDot, { backgroundColor: mood.color }]} />
+      <Text style={[styles.moodPillText, { color: mood.color }]}>
+        {mood.label}
       </Text>
     </View>
   );
 }
 
-// ─── SymbolTag ────────────────────────────────────────────────────────────────
-function SymbolTag({ label }) {
+// ─── SymbolPill ───────────────────────────────────────────────────────────────
+
+function SymbolPill({ name }) {
+  const sym   = getSymbolStyle(name);
+  const label = name ? name.charAt(0).toUpperCase() + name.slice(1) : '';
   return (
-    <View style={styles.symbolTag}>
-      <Text style={styles.symbolTagText}>#{label}</Text>
+    <View style={[styles.symbolPill, { backgroundColor: sym.bg }]}>
+      <Text style={[styles.symbolPillText, { color: sym.color }]}>{label}</Text>
     </View>
   );
 }
 
-// ─── LastDreamCard ────────────────────────────────────────────────────────────
-function LastDreamCard({ dream, onViewDetails, onRecordFirst }) {
-  const topEmotion = dream ? getTopEmotion(dream.dream_tags ?? []) : null;
-  const topSymbols = dream ? getTopSymbols(dream.dream_tags ?? [], 2) : [];
-  const summary = dream?.ai_summary ?? dream?.transcript ?? '';
+// ─── LastNightCard ────────────────────────────────────────────────────────────
 
+function LastNightCard({ dream, onPress, onRecordFirst }) {
   if (!dream) {
     return (
-      <Animated.View
-        entering={FadeInDown.delay(300).duration(450)}
-        style={styles.lastDreamCard}
-      >
-        <View style={styles.lastDreamCardInner}>
-          <Text style={styles.lastDreamLabel}>Last Night's Dream</Text>
-          <View style={styles.emptyState}>
-            <Text style={styles.emptyEmoji}>🌑</Text>
-            <Text style={styles.emptyTitle}>No dream recorded yet</Text>
-            <Text style={styles.emptyBody}>
-              Tap to capture last night's dream before it fades
-            </Text>
-            <TouchableOpacity
-              onPress={onRecordFirst}
-              style={styles.emptyRecordButton}
-              accessibilityRole="button"
-              accessibilityLabel="Record your first dream"
-            >
-              <Text style={styles.emptyRecordButtonText}>Record Now</Text>
-            </TouchableOpacity>
-          </View>
+      <Animated.View entering={FadeInDown.delay(200).duration(400)} style={styles.card}>
+        <Text style={styles.sectionLabel}>LAST NIGHT</Text>
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyTitle}>No dream yet</Text>
+          <Text style={styles.emptySub}>Nothing recorded last night.</Text>
+          <TouchableOpacity
+            onPress={onRecordFirst}
+            style={styles.emptyBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Record your first dream"
+          >
+            <Text style={styles.emptyBtnText}>Record your first</Text>
+          </TouchableOpacity>
         </View>
       </Animated.View>
     );
   }
 
+  const tags       = dream.dream_tags ?? [];
+  const topEmotion = getTopEmotion(tags);
+  const topSymbols = getTopSymbols(tags, 2);
+  const title      = dream.title ?? 'Untitled Dream';
+  const snippet    = dream.ai_summary ?? dream.transcript ?? '';
+  const timeStr    = dream.recorded_at
+    ? new Date(dream.recorded_at).toLocaleTimeString('en-US', {
+        hour:   'numeric',
+        minute: '2-digit',
+        hour12: true,
+      })
+    : '';
+
   return (
-    <Animated.View
-      entering={FadeInDown.delay(300).duration(450)}
-      style={styles.lastDreamCard}
-    >
-      <LinearGradient
-        colors={['rgba(123,94,167,0.10)', 'rgba(26,26,46,0.98)']}
-        style={styles.lastDreamCardInner}
+    <Animated.View entering={FadeInDown.delay(200).duration(400)}>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel={`View last night's dream: ${title}`}
+        style={[styles.card, styles.lastNightCard]}
       >
-        <View style={styles.lastDreamHeader}>
-          <Text style={styles.lastDreamLabel}>Last Night's Dream</Text>
-          <TouchableOpacity
-            onPress={onViewDetails}
-            accessibilityRole="button"
-            accessibilityLabel="View dream details"
-          >
-            <Text style={styles.viewDetailsLink}>View Details →</Text>
-          </TouchableOpacity>
-        </View>
+        <Text style={styles.sectionLabel}>LAST NIGHT</Text>
 
-        {dream.title ? (
-          <Text style={styles.lastDreamTitle}>{dream.title}</Text>
-        ) : null}
+        <Text style={styles.lastNightTitle} numberOfLines={2}>
+          {title}
+        </Text>
 
-        <Text style={styles.lastDreamSummary} numberOfLines={2}>
-          {truncateText(summary, 120) || 'Dream recorded — tap to view details'}
+        <Text style={styles.lastNightSnippet} numberOfLines={2}>
+          {snippet || 'Tap to read your dream…'}
         </Text>
 
         {(topEmotion || topSymbols.length > 0) && (
-          <View style={styles.tagRow}>
-            {topEmotion && <EmotionChip label={topEmotion.label} />}
+          <View style={styles.pillRow}>
+            {topEmotion && <MoodPill moodKey={topEmotion.label} />}
             {topSymbols.map((sym) => (
-              <SymbolTag key={sym.id ?? sym.label} label={sym.label} />
+              <SymbolPill key={sym.id ?? sym.label} name={sym.label} />
             ))}
           </View>
         )}
-      </LinearGradient>
-    </Animated.View>
-  );
-}
 
-// ─── PremiumTeaserCard ────────────────────────────────────────────────────────
-function PremiumTeaserCard({ title, description, emoji, onPress, delay }) {
-  return (
-    <Animated.View
-      entering={FadeInDown.delay(delay).duration(450)}
-      style={styles.premiumCard}
-    >
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={onPress}
-        style={styles.premiumCardTouchable}
-        accessibilityRole="button"
-        accessibilityLabel={`${title} — premium feature`}
-      >
-        {/* Preview content (blurred) */}
-        <View style={styles.premiumPreviewArea}>
-          <LinearGradient
-            colors={['rgba(123,94,167,0.25)', 'rgba(192,132,252,0.15)']}
-            style={StyleSheet.absoluteFill}
-          />
-          <Text style={styles.premiumPreviewEmoji}>{emoji}</Text>
-          <View style={styles.premiumPreviewDots}>
-            {[0, 1, 2].map((i) => (
-              <View key={i} style={styles.premiumPreviewDot} />
-            ))}
-          </View>
-          <View style={styles.premiumPreviewLines}>
-            {[80, 60, 70, 50].map((w, i) => (
-              <View key={i} style={[styles.premiumPreviewLine, { width: `${w}%` }]} />
-            ))}
-          </View>
-        </View>
-
-        {/* Blur overlay */}
-        <BlurView
-          intensity={18}
-          tint="dark"
-          style={StyleSheet.absoluteFill}
-        />
-
-        {/* Lock overlay content */}
-        <View style={styles.premiumLockOverlay}>
-          <View style={styles.premiumLockBadge}>
-            <Text style={styles.premiumLockIcon}>🔒</Text>
-          </View>
-          <Text style={styles.premiumCardTitle}>{title}</Text>
-          <Text style={styles.premiumCardDesc}>{description}</Text>
-          <View style={styles.premiumUpgradeTag}>
-            <Text style={styles.premiumUpgradeText}>✨ Upgrade to unlock</Text>
-          </View>
+        <View style={styles.lastNightFooter}>
+          {timeStr ? (
+            <Text style={styles.lastNightMeta}>Recorded {timeStr}</Text>
+          ) : (
+            <View />
+          )}
+          <Text style={styles.lastNightReadLink}>Read full →</Text>
         </View>
       </TouchableOpacity>
     </Animated.View>
   );
 }
 
-// ─── HomeScreen ───────────────────────────────────────────────────────────────
-export default function HomeScreen({ navigation }) {
-  const user = useDreamStore((s) => s.user);
-  const dreams = useDreamStore((s) => s.dreams);
-  const setDreams = useDreamStore((s) => s.setDreams);
-  const setCurrentDream = useDreamStore((s) => s.setCurrentDream);
-  const isPremium = useDreamStore((s) => s.isPremium);
+// ─── WeeklyInsightCard ────────────────────────────────────────────────────────
 
-  const lastDream = dreams.length > 0 ? dreams[0] : null;
-  const streak = getDreamStreak(dreams);
-  const greeting = getGreeting();
-  const displayName =
+function WeeklyInsightCard({ onPress }) {
+  return (
+    <Animated.View entering={FadeInDown.delay(300).duration(400)}>
+      <TouchableOpacity
+        activeOpacity={0.88}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityLabel="See all patterns"
+        style={styles.insightCard}
+      >
+        <LinearGradient
+          colors={[COLORS.peach2, COLORS.gold2]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={styles.insightHeader}>
+          <Text style={styles.insightIcon}>✦</Text>
+          <Text style={styles.insightLabel}>This week's insight</Text>
+        </View>
+        <Text style={styles.insightBody}>
+          Water has appeared in three dreams this week — a herald, in your
+          history, of change.
+        </Text>
+        <Text style={styles.insightLink}>See all patterns →</Text>
+      </TouchableOpacity>
+    </Animated.View>
+  );
+}
+
+// ─── TonightItem ──────────────────────────────────────────────────────────────
+
+function TonightItem({ icon, title, sub }) {
+  return (
+    <View style={styles.tonightItem}>
+      <View style={styles.tonightIconCircle}>
+        <Text style={styles.tonightItemIcon}>{icon}</Text>
+      </View>
+      <View style={styles.tonightItemText}>
+        <Text style={styles.tonightItemTitle}>{title}</Text>
+        <Text style={styles.tonightItemSub}>{sub}</Text>
+      </View>
+      <Text style={styles.tonightChevron}>→</Text>
+    </View>
+  );
+}
+
+// ─── TonightCard ──────────────────────────────────────────────────────────────
+
+function TonightCard() {
+  return (
+    <Animated.View entering={FadeInDown.delay(400).duration(400)} style={styles.card}>
+      <Text style={styles.sectionLabel}>TONIGHT</Text>
+      <TonightItem
+        icon="◐"
+        title="Set tonight's intention"
+        sub="5 sec for lucidity"
+      />
+      <View style={styles.tonightDivider} />
+      <TonightItem
+        icon="◔"
+        title="Reality check at 8 PM"
+        sub="in 2h 14m"
+      />
+      <View style={styles.tonightDivider} />
+      <TonightItem
+        icon="☾"
+        title="Wake & capture dream"
+        sub="optimal: 4:18 AM"
+      />
+    </Animated.View>
+  );
+}
+
+// ─── HomeScreen ───────────────────────────────────────────────────────────────
+
+export default function HomeScreen({ navigation }) {
+  const user            = useDreamStore((s) => s.user);
+  const dreams          = useDreamStore((s) => s.dreams);
+  const setDreams       = useDreamStore((s) => s.setDreams);
+  const setCurrentDream = useDreamStore((s) => s.setCurrentDream);
+
+  const lastDream    = dreams.length > 0 ? dreams[0] : null;
+  const streak       = getDreamStreak(dreams);
+  const greeting     = getGreeting();
+  const displayName  =
     user?.user_metadata?.full_name?.split(' ')[0] ??
     user?.name?.split(' ')[0] ??
-    'Dreamer';
-  const todayFormatted = formatDate(new Date());
+    'Anya';
+  const subLabel = formatShortDayDate(new Date());
 
-  // ── Load dreams on mount ──────────────────────────────────────────────────
+  // ── Load dreams on mount ───────────────────────────────────────────────────
   useEffect(() => {
     if (!user?.id) return;
-
     let cancelled = false;
     getDreams(user.id)
-      .then((data) => {
-        if (!cancelled) setDreams(data);
-      })
-      .catch((err) =>
-        console.warn('[HomeScreen] getDreams failed:', err)
-      );
-
-    return () => {
-      cancelled = true;
-    };
+      .then((data) => { if (!cancelled) setDreams(data); })
+      .catch((err) => console.warn('[HomeScreen] getDreams failed:', err));
+    return () => { cancelled = true; };
   }, [user?.id]);
 
-  // ── Navigation handlers ───────────────────────────────────────────────────
+  // ── Navigation handlers ────────────────────────────────────────────────────
   const handleRecord = useCallback(() => {
     navigation.navigate('Record');
   }, [navigation]);
@@ -426,88 +334,43 @@ export default function HomeScreen({ navigation }) {
     navigation.navigate('DreamDetail', { dreamId: lastDream.id });
   }, [lastDream, navigation, setCurrentDream]);
 
-  const handlePremiumTap = useCallback(() => {
-    navigation.navigate('Paywall');
-  }, [navigation]);
-
-  const handleSettings = useCallback(() => {
-    navigation.navigate('Settings');
+  const handlePatterns = useCallback(() => {
+    navigation.navigate('PatternAnalysis');
   }, [navigation]);
 
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
       <SafeAreaView style={styles.safeArea} edges={['top']}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
-          scrollEventThrottle={16}
         >
           {/* ── Header ── */}
-          <Animated.View
-            entering={FadeIn.duration(400)}
-            style={styles.header}
-          >
-            <View style={styles.headerLeft}>
-              <Text style={styles.greeting}>
-                {greeting},{' '}
-                <Text style={styles.greetingName}>{displayName}</Text>
-              </Text>
-              <Text style={styles.dateText}>{todayFormatted}</Text>
-            </View>
-            <TouchableOpacity
-              onPress={handleSettings}
-              style={styles.settingsButton}
-              accessibilityRole="button"
-              accessibilityLabel="Settings"
-            >
-              <Text style={styles.settingsIcon}>⚙️</Text>
-            </TouchableOpacity>
+          <Animated.View entering={FadeIn.duration(350)} style={styles.header}>
+            <Text style={styles.headerSub}>{subLabel}</Text>
+            <Text style={styles.headerTitle}>
+              {greeting}, {displayName}.
+            </Text>
           </Animated.View>
 
           {/* ── Streak card ── */}
           <StreakCard streak={streak} />
 
-          {/* ── Last dream preview ── */}
-          <LastDreamCard
+          {/* ── Last night ── */}
+          <LastNightCard
             dream={lastDream}
-            onViewDetails={handleViewDreamDetail}
+            onPress={handleViewDreamDetail}
             onRecordFirst={handleRecord}
           />
 
-          {/* ── Record button ── */}
-          <Animated.View
-            entering={FadeIn.delay(400).duration(500)}
-          >
-            <RecordButton onPress={handleRecord} />
-          </Animated.View>
+          {/* ── Weekly insight ── */}
+          <WeeklyInsightCard onPress={handlePatterns} />
 
-          {/* ── Premium teasers ── */}
-          <Animated.View
-            entering={FadeInDown.delay(500).duration(450)}
-            style={styles.premiumSection}
-          >
-            <Text style={styles.sectionLabel}>PREMIUM FEATURES</Text>
-            <View style={styles.premiumRow}>
-              <PremiumTeaserCard
-                title="Dreamscape Map"
-                description="Visualize your dream world"
-                emoji="🗺️"
-                onPress={handlePremiumTap}
-                delay={550}
-              />
-              <PremiumTeaserCard
-                title="Pattern Analysis"
-                description="Uncover hidden themes"
-                emoji="🔮"
-                onPress={handlePremiumTap}
-                delay={650}
-              />
-            </View>
-          </Animated.View>
+          {/* ── Tonight ── */}
+          <TonightCard />
 
-          {/* Bottom padding for tab bar */}
           <View style={styles.bottomPad} />
         </ScrollView>
       </SafeAreaView>
@@ -516,6 +379,7 @@ export default function HomeScreen({ navigation }) {
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -525,380 +389,286 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    flexGrow: 1,
+    flexGrow:          1,
     paddingHorizontal: 20,
-    paddingTop: 8,
+    paddingTop:        0,
   },
 
-  // Header
+  // ── Header ──────────────────────────────────────────────────────────────────
   header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 16,
+    paddingTop:    16,
+    paddingBottom: 20,
   },
-  headerLeft: {
-    flex: 1,
+  headerSub: {
+    fontSize:      13,
+    fontWeight:    '600',
+    color:         COLORS.ink3,
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom:  6,
   },
-  greeting: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: COLORS.muted,
-    letterSpacing: 0.2,
-  },
-  greetingName: {
-    color: COLORS.text,
-    fontWeight: '800',
-  },
-  dateText: {
-    fontSize: 14,
-    color: COLORS.muted,
-    marginTop: 2,
-  },
-  settingsButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(123,94,167,0.20)',
-  },
-  settingsIcon: {
-    fontSize: 18,
+  headerTitle: {
+    fontSize:      30,
+    fontWeight:    '500',
+    color:         COLORS.ink,
+    fontFamily:    'serif',
+    letterSpacing: -0.3,
   },
 
-  // Streak
-  streakCard: {
-    borderRadius: 18,
-    overflow: 'hidden',
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.25)',
-    shadowColor: COLORS.gold,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 4,
+  // ── Card (shared) ────────────────────────────────────────────────────────────
+  card: {
+    backgroundColor: COLORS.card,
+    borderRadius:    20,
+    borderWidth:     1,
+    borderColor:     COLORS.line,
+    padding:         20,
+    marginBottom:    14,
   },
-  streakCardInner: {
+
+  // ── Streak card ──────────────────────────────────────────────────────────────
+  streakRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    padding: 16,
-    borderRadius: 18,
+    alignItems:    'center',
+    marginBottom:  16,
   },
-  streakFlame: {
-    fontSize: 32,
-    marginRight: 12,
+  streakMoonWrap: {
+    marginRight: 14,
   },
-  streakTextGroup: {
+  streakMoonCircle: {
+    width:           44,
+    height:          44,
+    borderRadius:    22,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  streakMoonIcon: {
+    fontSize:   22,
+    color:      COLORS.card,
+    fontFamily: 'serif',
+  },
+  streakText: {
     flex: 1,
   },
-  streakCount: {
-    fontSize: 16,
-    color: COLORS.text,
+  streakTitle: {
+    fontSize:   16,
     fontWeight: '600',
+    color:      COLORS.ink,
   },
-  streakNumber: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: COLORS.gold,
+  streakNum: {
+    fontSize:   18,
+    fontWeight: '700',
+    color:      COLORS.ink,
   },
   streakSub: {
-    fontSize: 12,
-    color: COLORS.muted,
+    fontSize:  13,
+    color:     COLORS.ink3,
     marginTop: 2,
   },
-  streakBadge: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(245,158,11,0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  streakDots: {
+    flexDirection: 'row',
+    gap:           7,
   },
-  streakBadgeText: {
-    fontSize: 20,
+  streakDot: {
+    width:        10,
+    height:       10,
+    borderRadius: 5,
   },
 
-  // Last dream card
-  lastDreamCard: {
-    borderRadius: 20,
-    overflow: 'hidden',
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: 'rgba(123,94,167,0.22)',
-    shadowColor: COLORS.primary,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    elevation: 4,
-  },
-  lastDreamCardInner: {
-    padding: 18,
-    borderRadius: 20,
-  },
-  lastDreamHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  lastDreamLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.muted,
-    letterSpacing: 1.2,
+  // ── Section label ─────────────────────────────────────────────────────────────
+  sectionLabel: {
+    fontSize:      13,
+    fontWeight:    '600',
+    color:         COLORS.ink2,
     textTransform: 'uppercase',
+    letterSpacing: 0.8,
+    marginBottom:  14,
   },
-  viewDetailsLink: {
-    fontSize: 13,
-    color: COLORS.accent,
-    fontWeight: '600',
+
+  // ── Last night card ───────────────────────────────────────────────────────────
+  lastNightCard: {
+    padding: 22,
   },
-  lastDreamTitle: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 6,
+  lastNightTitle: {
+    fontSize:      26,
+    fontWeight:    '500',
+    color:         COLORS.ink,
+    fontFamily:    'serif',
+    letterSpacing: -0.2,
+    marginBottom:  10,
+    lineHeight:    32,
   },
-  lastDreamSummary: {
-    fontSize: 14,
-    color: COLORS.muted,
-    lineHeight: 21,
-    marginBottom: 12,
+  lastNightSnippet: {
+    fontSize:     16,
+    color:        COLORS.ink2,
+    fontFamily:   'serif',
+    lineHeight:   26,
+    marginBottom: 14,
   },
-  tagRow: {
+  pillRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    flexWrap:      'wrap',
+    gap:           8,
+    marginBottom:  16,
   },
-  emotionChip: {
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderWidth: 1,
-  },
-  emotionChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  symbolTag: {
-    borderRadius: 20,
+  moodPill: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    borderRadius:      20,
+    paddingVertical:   4,
     paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: 'rgba(139,139,174,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(139,139,174,0.25)',
+    gap:               6,
   },
-  symbolTagText: {
-    fontSize: 12,
-    color: COLORS.muted,
+  moodDot: {
+    width:        6,
+    height:       6,
+    borderRadius: 3,
+  },
+  moodPillText: {
+    fontSize:   13,
     fontWeight: '500',
   },
+  symbolPill: {
+    borderRadius:      20,
+    paddingVertical:   4,
+    paddingHorizontal: 10,
+  },
+  symbolPillText: {
+    fontSize:   13,
+    fontWeight: '500',
+  },
+  lastNightFooter: {
+    flexDirection:    'row',
+    justifyContent:   'space-between',
+    alignItems:       'center',
+    borderTopWidth:   1,
+    borderTopColor:   COLORS.line,
+    paddingTop:       12,
+  },
+  lastNightMeta: {
+    fontSize: 13,
+    color:    COLORS.ink3,
+  },
+  lastNightReadLink: {
+    fontSize:   13,
+    color:      COLORS.peach,
+    fontWeight: '600',
+  },
 
-  // Empty state
+  // ── Empty state ───────────────────────────────────────────────────────────────
   emptyState: {
-    alignItems: 'center',
+    alignItems:     'center',
     paddingVertical: 20,
   },
-  emptyEmoji: {
-    fontSize: 40,
-    marginBottom: 10,
-  },
   emptyTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 6,
-  },
-  emptyBody: {
-    fontSize: 13,
-    color: COLORS.muted,
-    textAlign: 'center',
-    lineHeight: 20,
-    paddingHorizontal: 12,
-    marginBottom: 16,
-  },
-  emptyRecordButton: {
-    backgroundColor: 'rgba(123,94,167,0.25)',
-    borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 24,
-    borderWidth: 1,
-    borderColor: 'rgba(192,132,252,0.35)',
-  },
-  emptyRecordButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.accent,
-  },
-
-  // Record button section
-  recordSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 28,
-    paddingVertical: 8,
-  },
-  pulseContainer: {
-    position: 'absolute',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: 100,
-    height: 100,
-  },
-  pulseRing: {
-    position: 'absolute',
-    borderWidth: 2,
-  },
-  recordButtonOuter: {
-    borderRadius: 50,
-    shadowColor: COLORS.accent,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.55,
-    shadowRadius: 20,
-    elevation: 14,
-  },
-  recordButtonGradient: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  micIcon: {
-    fontSize: 40,
-  },
-  recordLabel: {
-    marginTop: 12,
-    fontSize: 15,
-    fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: 0.4,
-  },
-
-  // Premium teasers
-  premiumSection: {
+    fontSize:     18,
+    fontWeight:   '500',
+    fontFamily:   'serif',
+    color:        COLORS.ink,
     marginBottom: 8,
   },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.muted,
-    letterSpacing: 1.4,
+  emptySub: {
+    fontSize:     14,
+    color:        COLORS.ink3,
+    marginBottom: 18,
+    textAlign:    'center',
+  },
+  emptyBtn: {
+    backgroundColor:  COLORS.ink,
+    borderRadius:     999,
+    height:           48,
+    paddingHorizontal: 28,
+    alignItems:       'center',
+    justifyContent:   'center',
+  },
+  emptyBtnText: {
+    fontSize:   15,
+    fontWeight: '500',
+    color:      COLORS.bg2,
+  },
+
+  // ── Weekly insight card ───────────────────────────────────────────────────────
+  insightCard: {
+    borderRadius:  20,
+    borderWidth:   1,
+    borderColor:   COLORS.line,
+    padding:       20,
+    marginBottom:  14,
+    overflow:      'hidden',
+  },
+  insightHeader: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    marginBottom:  10,
+    gap:           8,
+  },
+  insightIcon: {
+    fontSize: 16,
+    color:    COLORS.gold,
+  },
+  insightLabel: {
+    fontSize:      13,
+    fontWeight:    '600',
+    color:         COLORS.ink2,
     textTransform: 'uppercase',
-    marginBottom: 12,
+    letterSpacing: 0.8,
   },
-  premiumRow: {
-    flexDirection: 'row',
-    gap: 12,
+  insightBody: {
+    fontSize:     16,
+    fontFamily:   'serif',
+    color:        COLORS.ink,
+    lineHeight:   26,
+    marginBottom: 14,
   },
-  premiumCard: {
-    flex: 1,
-    borderRadius: 18,
-    overflow: 'hidden',
-    height: 170,
-    borderWidth: 1,
-    borderColor: 'rgba(192,132,252,0.22)',
-    shadowColor: COLORS.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.20,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  premiumCardTouchable: {
-    flex: 1,
-    borderRadius: 18,
-    overflow: 'hidden',
-  },
-  premiumPreviewArea: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-    backgroundColor: COLORS.card,
-  },
-  premiumPreviewEmoji: {
-    fontSize: 36,
-    marginBottom: 8,
-    opacity: 0.6,
-  },
-  premiumPreviewDots: {
-    flexDirection: 'row',
-    gap: 6,
-    marginBottom: 8,
-    opacity: 0.4,
-  },
-  premiumPreviewDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.accent,
-  },
-  premiumPreviewLines: {
-    width: '100%',
-    gap: 5,
-    opacity: 0.3,
-  },
-  premiumPreviewLine: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: COLORS.muted,
-    alignSelf: 'flex-start',
-  },
-  premiumLockOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 12,
-  },
-  premiumLockBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(245,158,11,0.20)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.40)',
-  },
-  premiumLockIcon: {
-    fontSize: 16,
-  },
-  premiumCardTitle: {
-    fontSize: 14,
-    fontWeight: '800',
-    color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: 4,
-  },
-  premiumCardDesc: {
-    fontSize: 11,
-    color: COLORS.muted,
-    textAlign: 'center',
-    marginBottom: 10,
-    lineHeight: 16,
-  },
-  premiumUpgradeTag: {
-    backgroundColor: 'rgba(245,158,11,0.18)',
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderWidth: 1,
-    borderColor: 'rgba(245,158,11,0.35)',
-  },
-  premiumUpgradeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.gold,
+  insightLink: {
+    fontSize:   13,
+    color:      COLORS.peach,
+    fontWeight: '600',
   },
 
-  // Bottom padding for tab bar
+  // ── Tonight card ──────────────────────────────────────────────────────────────
+  tonightItem: {
+    flexDirection: 'row',
+    alignItems:    'center',
+    paddingVertical: 12,
+    gap:           14,
+  },
+  tonightIconCircle: {
+    width:           38,
+    height:          38,
+    borderRadius:    19,
+    backgroundColor: COLORS.peach2,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  tonightItemIcon: {
+    fontSize: 16,
+    color:    COLORS.peach,
+  },
+  tonightItemText: {
+    flex: 1,
+  },
+  tonightItemTitle: {
+    fontSize:     15,
+    fontWeight:   '500',
+    color:        COLORS.ink,
+    marginBottom: 2,
+  },
+  tonightItemSub: {
+    fontSize: 13,
+    color:    COLORS.ink3,
+  },
+  tonightChevron: {
+    fontSize: 16,
+    color:    COLORS.ink4,
+  },
+  tonightDivider: {
+    height:          1,
+    backgroundColor: COLORS.line,
+    marginLeft:      52,
+  },
+
+  // ── Bottom spacing for tab bar ────────────────────────────────────────────────
   bottomPad: {
-    height: Platform.OS === 'ios' ? 24 : 16,
+    height: Platform.OS === 'ios' ? 32 : 20,
   },
 });

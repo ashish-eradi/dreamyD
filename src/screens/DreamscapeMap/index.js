@@ -1,360 +1,232 @@
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  Dimensions,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
-import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { GestureDetector, Gesture } from 'react-native-gesture-handler';
-import Animated, {
-  useAnimatedStyle,
-  useSharedValue,
-  withSpring,
-} from 'react-native-reanimated';
-import { useStore } from '../../store';
-import PremiumGate from '../../components/PremiumGate';
-import { getEmotionColor } from '../../utils';
+import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
+import { useDreamStore } from '../../store';
+import { COLORS, SYMBOLS } from '../../constants/theme';
 
-const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get('window');
-const MAP_W = SCREEN_W - 32;
-const MAP_H = SCREEN_H * 0.5;
+const { width: SCREEN_W } = Dimensions.get('window');
+const MAP_W = SCREEN_W - 40;
+const MAP_H = 400;
 
-const COLORS = {
-  background: '#0D0D1A',
-  card: '#1A1A2E',
-  primary: '#7B5EA7',
-  accent: '#C084FC',
-  text: '#F1F0FF',
-  muted: '#8B8BAE',
-};
-
-const EMOTIONS = ['Joy', 'Fear', 'Peace', 'Sadness', 'Confusion'];
-const EMOTION_COLORS_LIST = EMOTIONS.map((e) => ({ emotion: e, color: getEmotionColor(e) }));
-
-function buildGraph(dreams) {
-  const symbolMap = {};
-  const edgeMap = {};
-
-  for (const dream of dreams) {
-    const tags = dream.tags || [];
-    const symbols = tags.filter((t) => t.type === 'symbol').map((t) => t.label);
-    const topEmotion = tags
-      .filter((t) => t.type === 'emotion')
-      .sort((a, b) => b.confidence_score - a.confidence_score)[0];
-
-    for (const sym of symbols) {
-      if (!symbolMap[sym]) {
-        symbolMap[sym] = { label: sym, count: 0, emotion: topEmotion?.label ?? 'mystery' };
-      }
-      symbolMap[sym].count += 1;
-    }
-
-    for (let i = 0; i < symbols.length; i++) {
-      for (let j = i + 1; j < symbols.length; j++) {
-        const key = [symbols[i], symbols[j]].sort().join('|');
-        edgeMap[key] = (edgeMap[key] || 0) + 1;
-      }
-    }
-  }
-
-  const nodes = Object.values(symbolMap);
-  const edges = Object.entries(edgeMap).map(([key, weight]) => {
-    const [a, b] = key.split('|');
-    return { from: a, to: b, weight };
-  });
-
-  // Assign positions in a circle layout
-  const cx = MAP_W / 2;
-  const cy = MAP_H / 2;
-  const r = Math.min(MAP_W, MAP_H) * 0.35;
-  nodes.forEach((node, i) => {
-    const angle = (i / nodes.length) * 2 * Math.PI - Math.PI / 2;
-    node.x = cx + r * Math.cos(angle);
-    node.y = cy + r * Math.sin(angle);
-  });
-
-  return { nodes, edges };
-}
-
-// Mock data for when no dreams exist
-const MOCK_GRAPH = {
-  nodes: [
-    { label: 'Water', count: 8, emotion: 'peace', x: MAP_W / 2, y: MAP_H / 2 - 120 },
-    { label: 'Flying', count: 6, emotion: 'joy', x: MAP_W / 2 + 120, y: MAP_H / 2 - 40 },
-    { label: 'House', count: 5, emotion: 'confusion', x: MAP_W / 2 + 80, y: MAP_H / 2 + 100 },
-    { label: 'Falling', count: 4, emotion: 'fear', x: MAP_W / 2 - 80, y: MAP_H / 2 + 100 },
-    { label: 'People', count: 7, emotion: 'sadness', x: MAP_W / 2 - 120, y: MAP_H / 2 - 40 },
-  ],
-  edges: [
-    { from: 'Water', to: 'Flying', weight: 3 },
-    { from: 'Flying', to: 'House', weight: 2 },
-    { from: 'House', to: 'Falling', weight: 2 },
-    { from: 'Falling', to: 'People', weight: 4 },
-    { from: 'People', to: 'Water', weight: 3 },
-    { from: 'Water', to: 'House', weight: 1 },
-  ],
-};
+const NODES = [
+  { name: 'water',   x: 0.25, y: 0.28, r: 32 },
+  { name: 'ocean',   x: 0.50, y: 0.17, r: 24 },
+  { name: 'people',  x: 0.61, y: 0.43, r: 38 },
+  { name: 'school',  x: 0.22, y: 0.56, r: 22 },
+  { name: 'house',   x: 0.78, y: 0.63, r: 26 },
+  { name: 'falling', x: 0.44, y: 0.76, r: 24 },
+  { name: 'flying',  x: 0.19, y: 0.82, r: 22 },
+  { name: 'light',   x: 0.81, y: 0.33, r: 30 },
+  { name: 'forest',  x: 0.69, y: 0.87, r: 20 },
+  { name: 'chase',   x: 0.36, y: 0.48, r: 24 },
+];
+const EDGES = [
+  ['water','ocean'],['water','people'],['ocean','light'],
+  ['people','house'],['people','school'],['school','chase'],
+  ['chase','falling'],['falling','flying'],['house','forest'],
+  ['light','people'],['water','falling'],
+];
 
 export default function DreamscapeMapScreen() {
   const navigation = useNavigation();
-  const dreams = useStore((s) => s.dreams);
-  const [selectedNode, setSelectedNode] = useState(null);
-  const translateX = useSharedValue(0);
-  const translateY = useSharedValue(0);
-  const scale = useSharedValue(1);
-  const savedX = useSharedValue(0);
-  const savedY = useSharedValue(0);
-  const savedScale = useSharedValue(1);
+  const insets = useSafeAreaInsets();
+  const [selected, setSelected] = useState(null);
+  const dreams = useDreamStore(s => s.dreams) || [];
+  const isPremium = useDreamStore(s => s.isPremium);
 
-  const graph = useMemo(() => (dreams.length > 0 ? buildGraph(dreams) : MOCK_GRAPH), [dreams]);
+  const dreamsForSym = (sym) =>
+    dreams.filter(d => (d.dream_tags || []).some(t => t.type === 'symbol' && t.label?.toLowerCase() === sym));
 
-  const maxCount = useMemo(() => Math.max(...graph.nodes.map((n) => n.count), 1), [graph]);
+  const byName = Object.fromEntries(NODES.map(n => [n.name, n]));
 
-  const nodeRadius = useCallback(
-    (count) => 14 + (count / maxCount) * 22,
-    [maxCount]
-  );
-
-  const findNode = useCallback(
-    (label) => graph.nodes.find((n) => n.label === label),
-    [graph]
-  );
-
-  const panGesture = Gesture.Pan()
-    .onUpdate((e) => {
-      translateX.value = savedX.value + e.translationX;
-      translateY.value = savedY.value + e.translationY;
-    })
-    .onEnd(() => {
-      savedX.value = translateX.value;
-      savedY.value = translateY.value;
-    });
-
-  const pinchGesture = Gesture.Pinch()
-    .onUpdate((e) => {
-      scale.value = Math.max(0.5, Math.min(3, savedScale.value * e.scale));
-    })
-    .onEnd(() => {
-      savedScale.value = scale.value;
-    });
-
-  const composed = Gesture.Simultaneous(panGesture, pinchGesture);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateX: translateX.value },
-      { translateY: translateY.value },
-      { scale: scale.value },
-    ],
-  }));
-
-  const handleNodePress = (node) => {
-    setSelectedNode(node.label === selectedNode ? null : node.label);
-  };
-
-  const selectedDreams = useMemo(() => {
-    if (!selectedNode) return [];
-    return dreams.filter((d) =>
-      (d.tags || []).some((t) => t.type === 'symbol' && t.label === selectedNode)
-    );
-  }, [selectedNode, dreams]);
+  const nodeX = (n) => n.x * MAP_W;
+  const nodeY = (n) => n.y * MAP_H;
 
   return (
-    <PremiumGate featureName="Dreamscape Map">
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-          <View>
-            <Text style={styles.headerTitle}>Dreamscape Map</Text>
-            <Text style={styles.headerSubtitle}>Your Symbol Universe</Text>
-          </View>
-          <View style={{ width: 40 }} />
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.circleBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.circleBtnText}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Symbol map</Text>
+        <View style={{ width: 38 }} />
+      </View>
+
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.sub}>Last 90 days</Text>
+        <Text style={styles.pageTitle}>Your patterns</Text>
+
+        {/* SVG map */}
+        <View style={styles.mapCard}>
+          <Svg width={MAP_W} height={MAP_H} viewBox={`0 0 ${MAP_W} ${MAP_H}`}>
+            {/* Edges */}
+            {EDGES.map(([a, b], i) => {
+              const na = byName[a], nb = byName[b];
+              if (!na || !nb) return null;
+              const active = selected && (a === selected || b === selected);
+              return (
+                <Line
+                  key={i}
+                  x1={nodeX(na)} y1={nodeY(na)}
+                  x2={nodeX(nb)} y2={nodeY(nb)}
+                  stroke={active ? COLORS.peach : COLORS.line2}
+                  strokeWidth={active ? 1.5 : 1}
+                />
+              );
+            })}
+            {/* Nodes */}
+            {NODES.map(n => {
+              const isActive = selected === n.name;
+              const isDim = selected && !isActive;
+              const sym = SYMBOLS[n.name] || { color: COLORS.ink3, bg: COLORS.line };
+              const count = dreamsForSym(n.name).length;
+              return (
+                <React.Fragment key={n.name}>
+                  <Circle
+                    cx={nodeX(n)} cy={nodeY(n)} r={n.r}
+                    fill={sym.bg}
+                    stroke={isActive ? sym.color : 'transparent'}
+                    strokeWidth={isActive ? 2 : 0}
+                    opacity={isDim ? 0.35 : 1}
+                    onPress={() => setSelected(isActive ? null : n.name)}
+                  />
+                  <SvgText
+                    x={nodeX(n)} y={nodeY(n) + 5}
+                    textAnchor="middle"
+                    fill={sym.color}
+                    fontSize={12} fontWeight="500"
+                    opacity={isDim ? 0.4 : 1}
+                    onPress={() => setSelected(isActive ? null : n.name)}
+                  >{n.name}</SvgText>
+                  {count > 0 && (
+                    <SvgText
+                      x={nodeX(n)} y={nodeY(n) + n.r + 14}
+                      textAnchor="middle"
+                      fill={COLORS.ink3}
+                      fontSize={10}
+                      opacity={isDim ? 0.35 : 0.85}
+                    >×{count}</SvgText>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </Svg>
+          {!selected && (
+            <View style={styles.tapHint}>
+              <Text style={styles.tapHintText}>Tap a symbol</Text>
+            </View>
+          )}
         </View>
 
-        {/* Map */}
-        <View style={styles.mapContainer}>
-          <GestureDetector gesture={composed}>
-            <Animated.View style={[styles.mapInner, animatedStyle]}>
-              <Svg width={MAP_W} height={MAP_H}>
-                {/* Edges */}
-                {graph.edges.map((edge, i) => {
-                  const from = findNode(edge.from);
-                  const to = findNode(edge.to);
-                  if (!from || !to) return null;
-                  return (
-                    <Line
-                      key={i}
-                      x1={from.x}
-                      y1={from.y}
-                      x2={to.x}
-                      y2={to.y}
-                      stroke={`rgba(192,132,252,${0.1 + edge.weight * 0.05})`}
-                      strokeWidth={edge.weight}
-                    />
-                  );
-                })}
-
-                {/* Nodes */}
-                {graph.nodes.map((node, i) => {
-                  const r = nodeRadius(node.count);
-                  const color = getEmotionColor(node.emotion);
-                  const isSelected = selectedNode === node.label;
-                  return (
-                    <React.Fragment key={i}>
-                      <Circle
-                        cx={node.x}
-                        cy={node.y}
-                        r={r}
-                        fill={color + (isSelected ? 'CC' : '50')}
-                        stroke={isSelected ? color : `${color}80`}
-                        strokeWidth={isSelected ? 2.5 : 1.5}
-                        onPress={() => handleNodePress(node)}
-                      />
-                      <SvgText
-                        x={node.x}
-                        y={node.y + r + 12}
-                        fill={COLORS.text}
-                        fontSize={11}
-                        textAnchor="middle"
-                        opacity={0.85}
-                      >
-                        {node.label}
-                      </SvgText>
-                    </React.Fragment>
-                  );
-                })}
-              </Svg>
-            </Animated.View>
-          </GestureDetector>
-
-          <Text style={styles.mapHint}>Pinch to zoom · Drag to pan · Tap node to explore</Text>
-        </View>
-
-        {/* Legend */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.legend}
-        >
-          {EMOTION_COLORS_LIST.map(({ emotion, color }) => (
-            <View key={emotion} style={styles.legendItem}>
-              <View style={[styles.legendDot, { backgroundColor: color }]} />
-              <Text style={styles.legendText}>{emotion}</Text>
-            </View>
-          ))}
-        </ScrollView>
-
-        {/* Node detail */}
-        {selectedNode && (
-          <View style={styles.nodeDetail}>
-            <View style={styles.nodeDetailHeader}>
-              <Text style={styles.nodeDetailTitle}>{selectedNode}</Text>
-              <Text style={styles.nodeDetailCount}>
-                {graph.nodes.find((n) => n.label === selectedNode)?.count ?? 0} dreams
-              </Text>
-            </View>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.nodeDetailDreams}>
-              {selectedDreams.length === 0 ? (
-                <Text style={styles.noRelatedDreams}>No recorded dreams with this symbol yet</Text>
-              ) : (
-                selectedDreams.map((d) => (
-                  <TouchableOpacity
-                    key={d.id}
-                    style={styles.miniDreamCard}
-                    onPress={() => navigation.navigate('DreamDetail', { dreamId: d.id })}
-                  >
-                    <Text style={styles.miniDreamDate} numberOfLines={1}>
-                      {d.recorded_at ? new Date(d.recorded_at).toLocaleDateString() : ''}
-                    </Text>
-                    <Text style={styles.miniDreamSummary} numberOfLines={2}>
-                      {d.ai_summary || 'No summary'}
-                    </Text>
-                  </TouchableOpacity>
-                ))
-              )}
-            </ScrollView>
+        {/* Selected symbol detail */}
+        {selected && (
+          <View style={styles.detailSection}>
+            <Text style={styles.detailTitle}>{selected}</Text>
+            <Text style={styles.detailSub}>
+              {dreamsForSym(selected).length} appearances · often paired with "people"
+            </Text>
+            {dreamsForSym(selected).slice(0, 3).map(d => (
+              <TouchableOpacity
+                key={d.id}
+                style={styles.dreamRow}
+                onPress={() => navigation.navigate('DreamDetail', { dreamId: d.id })}
+              >
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.dreamRowTitle} numberOfLines={1}>
+                    {d.ai_summary?.split('.')[0] || 'Untitled dream'}
+                  </Text>
+                  <Text style={styles.dreamRowDate}>
+                    {d.recorded_at ? new Date(d.recorded_at).toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' }) : ''}
+                  </Text>
+                </View>
+                <Text style={styles.arrow}>→</Text>
+              </TouchableOpacity>
+            ))}
           </View>
         )}
-      </SafeAreaView>
-    </PremiumGate>
+
+        {!isPremium && !selected && (
+          <View style={styles.upsellCard}>
+            <Text style={styles.upsellEyebrow}>✦ Go deeper</Text>
+            <Text style={styles.upsellTitle}>Premium reveals what your symbols predict — not just what they connect to.</Text>
+            <TouchableOpacity style={styles.upsellBtn} onPress={() => navigation.navigate('Paywall')}>
+              <Text style={styles.upsellBtnText}>Unlock for ₹179/mo</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </ScrollView>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  root: { flex: 1, backgroundColor: COLORS.bg },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(123,94,167,0.2)',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
   },
-  backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { color: COLORS.text, fontSize: 18, fontWeight: '700' },
-  headerSubtitle: { color: COLORS.muted, fontSize: 12, marginTop: 2 },
-  mapContainer: {
-    margin: 16,
-    backgroundColor: COLORS.card,
-    borderRadius: 20,
-    overflow: 'hidden',
-    borderWidth: 1,
-    borderColor: 'rgba(123,94,167,0.25)',
+  circleBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.line,
+    alignItems: 'center', justifyContent: 'center',
   },
-  mapInner: { width: MAP_W, height: MAP_H },
-  mapHint: {
-    color: COLORS.muted,
-    fontSize: 11,
-    textAlign: 'center',
-    paddingVertical: 8,
+  circleBtnText: { fontSize: 16, color: COLORS.ink },
+  headerTitle: { fontSize: 15, fontWeight: '500', color: COLORS.ink },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  sub: { fontSize: 13, color: COLORS.ink3, marginBottom: 4 },
+  pageTitle: {
+    fontFamily: 'Lora_500Medium', fontSize: 30, fontWeight: '500',
+    color: COLORS.ink, marginBottom: 16,
   },
-  legend: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    gap: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
+  mapCard: {
+    backgroundColor: COLORS.card, borderRadius: 20,
+    borderWidth: 1, borderColor: COLORS.line,
+    overflow: 'hidden', marginBottom: 16,
   },
-  legendItem: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  legendDot: { width: 10, height: 10, borderRadius: 5 },
-  legendText: { color: COLORS.muted, fontSize: 12 },
-  nodeDetail: {
-    margin: 16,
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(192,132,252,0.3)',
+  tapHint: {
+    position: 'absolute', bottom: 16, left: 0, right: 0, alignItems: 'center',
   },
-  nodeDetailHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+  tapHintText: {
+    paddingHorizontal: 14, paddingVertical: 6, borderRadius: 20,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    fontSize: 12, color: COLORS.ink2,
   },
-  nodeDetailTitle: { color: COLORS.text, fontSize: 16, fontWeight: '700' },
-  nodeDetailCount: { color: COLORS.muted, fontSize: 13 },
-  nodeDetailDreams: {},
-  noRelatedDreams: { color: COLORS.muted, fontSize: 13, fontStyle: 'italic' },
-  miniDreamCard: {
-    width: 140,
-    backgroundColor: '#0D0D1A',
-    borderRadius: 10,
-    padding: 10,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(123,94,167,0.3)',
+  detailSection: { marginBottom: 16 },
+  detailTitle: {
+    fontFamily: 'Lora_500Medium', fontSize: 24, fontWeight: '500',
+    color: COLORS.ink, textTransform: 'capitalize', marginBottom: 4,
   },
-  miniDreamDate: { color: COLORS.muted, fontSize: 11, marginBottom: 4 },
-  miniDreamSummary: { color: COLORS.text, fontSize: 12, lineHeight: 16 },
+  detailSub: { fontSize: 13, color: COLORS.ink3, marginBottom: 12 },
+  dreamRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.card, borderRadius: 14,
+    borderWidth: 1, borderColor: COLORS.line,
+    padding: 14, marginBottom: 8,
+  },
+  dreamRowTitle: {
+    fontFamily: 'Lora_500Medium', fontSize: 16, fontWeight: '500', color: COLORS.ink,
+  },
+  dreamRowDate: { fontSize: 12, color: COLORS.ink3, marginTop: 2 },
+  arrow: { fontSize: 16, color: COLORS.ink3 },
+  upsellCard: {
+    padding: 22, borderRadius: 20,
+    backgroundColor: COLORS.peach2,
+  },
+  upsellEyebrow: { fontSize: 13, fontWeight: '600', color: COLORS.ink, marginBottom: 8 },
+  upsellTitle: {
+    fontFamily: 'Lora_500Medium', fontSize: 17, lineHeight: 24,
+    color: COLORS.ink, marginBottom: 16,
+  },
+  upsellBtn: {
+    alignSelf: 'flex-start', paddingHorizontal: 22, paddingVertical: 10,
+    borderRadius: 20, backgroundColor: COLORS.ink,
+  },
+  upsellBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.bg2 },
 });

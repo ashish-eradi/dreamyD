@@ -1,296 +1,206 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TouchableOpacity,
-  ActivityIndicator,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  StatusBar, ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { LinearGradient } from 'expo-linear-gradient';
-import { useStore } from '../../store';
-import PremiumGate from '../../components/PremiumGate';
+import { useDreamStore } from '../../store';
 import { getPatterns, savePattern } from '../../services/supabase';
 import { detectPatterns } from '../../services/openai';
-import { formatShortDate } from '../../utils';
+import { COLORS, SYMBOLS } from '../../constants/theme';
 
-const COLORS = {
-  background: '#0D0D1A',
-  card: '#1A1A2E',
-  primary: '#7B5EA7',
-  accent: '#C084FC',
-  gold: '#F59E0B',
-  text: '#F1F0FF',
-  muted: '#8B8BAE',
-  success: '#10B981',
-};
+function SymbolTag({ name }) {
+  const s = SYMBOLS[name] || { color: COLORS.ink3, bg: COLORS.line };
+  return (
+    <View style={[styles.pill, { backgroundColor: s.bg }]}>
+      <Text style={[styles.pillText, { color: s.color }]}>{name}</Text>
+    </View>
+  );
+}
+
+function PatternCard({ pattern, locked, onUnlock }) {
+  return (
+    <View style={styles.card}>
+      {locked && (
+        <View style={styles.lockOverlay}>
+          <TouchableOpacity style={styles.unlockBtn} onPress={onUnlock}>
+            <Text style={styles.unlockBtnText}>⌬ Unlock</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+      <Text style={styles.confidence}>
+        {Math.round((pattern.confidence_score || pattern.confidence || 0) * 100)}% CONFIDENCE
+      </Text>
+      <Text style={styles.patternTitle}>"{pattern.pattern_text || pattern.title}"</Text>
+      {pattern.detail && <Text style={styles.patternDetail}>{pattern.detail}</Text>}
+      {(pattern.symbols_involved || pattern.symbols || []).length > 0 && (
+        <View style={styles.pills}>
+          {(pattern.symbols_involved || pattern.symbols || []).map(s => (
+            <SymbolTag key={s} name={s} />
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
 
 export default function PatternAnalysisScreen() {
   const navigation = useNavigation();
-  const user = useStore((s) => s.user);
-  const dreams = useStore((s) => s.dreams);
+  const insets = useSafeAreaInsets();
+  const { dreams, user, isPremium } = useDreamStore();
   const [patterns, setPatterns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [analyzing, setAnalyzing] = useState(false);
-  const [error, setError] = useState(null);
 
   useEffect(() => {
-    if (user?.id) loadPatterns();
-  }, [user?.id]);
+    loadPatterns();
+  }, []);
 
   const loadPatterns = async () => {
     setLoading(true);
     try {
-      const data = await getPatterns(user.id);
-      setPatterns(data || []);
-    } catch {
-      setError('Could not load patterns.');
-    } finally {
-      setLoading(false);
-    }
+      if (user?.id) {
+        const data = await getPatterns(user.id);
+        setPatterns(data || []);
+      }
+    } catch {}
+    finally { setLoading(false); }
   };
 
   const handleAnalyze = async () => {
-    if (dreams.length < 5) return;
+    if (!isPremium) {
+      navigation.navigate('Paywall');
+      return;
+    }
     setAnalyzing(true);
     try {
-      const summaries = dreams.map((d) => d.ai_summary).filter(Boolean);
-      const detected = await detectPatterns(summaries);
-      if (detected?.length) {
-        for (const p of detected) {
-          await savePattern({ user_id: user.id, ...p });
+      const summaries = (dreams || []).map(d => d.ai_summary || d.transcript).filter(Boolean);
+      const newPatterns = await detectPatterns(summaries);
+      if (newPatterns?.length) {
+        for (const p of newPatterns) {
+          if (user?.id) await savePattern({ user_id: user.id, ...p });
         }
-        await loadPatterns();
+        setPatterns(prev => [...newPatterns, ...prev]);
       }
-    } catch {
-      setError('Pattern analysis failed. Please try again.');
-    } finally {
-      setAnalyzing(false);
-    }
+    } catch {}
+    finally { setAnalyzing(false); }
   };
 
-  const renderPattern = ({ item }) => (
-    <View style={styles.patternCard}>
-      <View style={styles.patternHeader}>
-        <View style={styles.aiChip}>
-          <Text style={styles.aiChipText}>AI Insight</Text>
-        </View>
-        <Text style={styles.patternDate}>
-          {item.generated_at ? formatShortDate(new Date(item.generated_at)) : ''}
-        </Text>
-      </View>
-
-      <Text style={styles.patternText}>{item.pattern_text}</Text>
-
-      {item.symbols_involved?.length > 0 && (
-        <View style={styles.symbolsRow}>
-          <Ionicons name="prism-outline" size={14} color={COLORS.muted} style={{ marginRight: 6 }} />
-          <ScrollableChips symbols={item.symbols_involved} />
-        </View>
-      )}
-
-      <View style={styles.patternFooter}>
-        <Ionicons name="moon-outline" size={14} color={COLORS.muted} />
-        <Text style={styles.dreamCount}>
-          Found across {item.dream_count ?? '?'} dreams
-        </Text>
-      </View>
-
-      <View style={styles.confidenceBar}>
-        <View
-          style={[
-            styles.confidenceFill,
-            { width: `${(item.confidence ?? 0.7) * 100}%` },
-          ]}
-        />
-      </View>
-    </View>
-  );
-
   return (
-    <PremiumGate featureName="Pattern Analysis">
-      <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-        {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-            <Ionicons name="chevron-back" size={24} color={COLORS.text} />
-          </TouchableOpacity>
-          <View>
-            <Text style={styles.headerTitle}>Pattern Analysis</Text>
-            <View style={styles.aiBadge}>
-              <Ionicons name="sparkles" size={10} color={COLORS.accent} />
-              <Text style={styles.aiBadgeText}>Powered by AI</Text>
-            </View>
-          </View>
-          <TouchableOpacity
-            onPress={loadPatterns}
-            style={styles.refreshBtn}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="refresh" size={20} color={COLORS.muted} />
-          </TouchableOpacity>
-        </View>
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
+
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.circleBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.circleBtnText}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Patterns</Text>
+        <View style={{ width: 38 }} />
+      </View>
+
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.pageTitle}>What recurs</Text>
+        <Text style={styles.pageSub}>AI-detected across your dream journal</Text>
 
         {loading ? (
-          <View style={styles.centered}>
-            <ActivityIndicator color={COLORS.accent} size="large" />
+          <View style={styles.center}>
+            <ActivityIndicator color={COLORS.peach} />
+          </View>
+        ) : patterns.length === 0 ? (
+          <View style={styles.emptyState}>
+            <Text style={styles.emptyGlyph}>✦</Text>
+            <Text style={styles.emptyTitle}>Patterns emerge after ten.</Text>
+            <Text style={styles.emptyBody}>Log at least 10 dreams and tap "Analyze" to reveal what recurs.</Text>
           </View>
         ) : (
-          <FlatList
-            data={patterns}
-            keyExtractor={(item) => item.id}
-            renderItem={renderPattern}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-            ListEmptyComponent={
-              <View style={styles.emptyState}>
-                <Text style={styles.emptyIcon}>🔮</Text>
-                <Text style={styles.emptyTitle}>No patterns yet</Text>
-                <Text style={styles.emptySubtitle}>
-                  {dreams.length < 5
-                    ? `Record ${5 - dreams.length} more dream${5 - dreams.length !== 1 ? 's' : ''} to unlock pattern analysis`
-                    : 'Tap "Analyze" to discover recurring themes in your dreams'}
-                </Text>
-              </View>
-            }
-            ListFooterComponent={
-              dreams.length >= 5 ? (
-                <TouchableOpacity
-                  style={styles.analyzeBtn}
-                  onPress={handleAnalyze}
-                  disabled={analyzing}
-                  activeOpacity={0.85}
-                >
-                  <LinearGradient
-                    colors={['#7B5EA7', '#C084FC']}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.analyzeBtnGradient}
-                  >
-                    {analyzing ? (
-                      <ActivityIndicator color="#fff" size="small" />
-                    ) : (
-                      <Ionicons name="sparkles" size={18} color="#fff" />
-                    )}
-                    <Text style={styles.analyzeBtnText}>
-                      {analyzing ? 'Analyzing...' : 'Analyze New Patterns'}
-                    </Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-              ) : null
-            }
-          />
+          <View style={styles.patternList}>
+            {patterns.map((p, i) => (
+              <PatternCard
+                key={p.id || i}
+                pattern={p}
+                locked={!isPremium && i > 0}
+                onUnlock={() => navigation.navigate('Paywall')}
+              />
+            ))}
+          </View>
         )}
 
-        {error ? (
-          <View style={styles.errorBar}>
-            <Text style={styles.errorText}>{error}</Text>
-          </View>
-        ) : null}
-      </SafeAreaView>
-    </PremiumGate>
-  );
-}
-
-function ScrollableChips({ symbols }) {
-  return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, flex: 1 }}>
-      {symbols.map((sym, i) => (
-        <View key={i} style={chipStyles.pill}>
-          <Text style={chipStyles.text}>{sym}</Text>
-        </View>
-      ))}
+        <TouchableOpacity
+          style={[styles.analyzeBtn, analyzing && { opacity: 0.6 }]}
+          onPress={handleAnalyze}
+          disabled={analyzing}
+        >
+          {analyzing
+            ? <ActivityIndicator color={COLORS.bg2} size="small" />
+            : <Text style={styles.analyzeBtnText}>{isPremium ? 'Analyze new patterns' : '⌬ Unlock pattern analysis'}</Text>
+          }
+        </TouchableOpacity>
+      </ScrollView>
     </View>
   );
 }
 
-const chipStyles = StyleSheet.create({
-  pill: {
-    borderWidth: 1,
-    borderColor: 'rgba(192,132,252,0.4)',
-    borderRadius: 12,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
-  },
-  text: { color: COLORS.accent, fontSize: 12 },
-});
-
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: COLORS.background },
+  root: { flex: 1, backgroundColor: COLORS.bg },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(123,94,167,0.2)',
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
   },
-  backBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { color: COLORS.text, fontSize: 18, fontWeight: '700' },
-  aiBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 2 },
-  aiBadgeText: { color: COLORS.accent, fontSize: 11 },
-  refreshBtn: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  listContent: { padding: 16, paddingBottom: 100 },
-  patternCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(123,94,167,0.25)',
+  circleBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.line,
+    alignItems: 'center', justifyContent: 'center',
   },
-  patternHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
+  circleBtnText: { fontSize: 16, color: COLORS.ink },
+  headerTitle: { fontSize: 15, fontWeight: '500', color: COLORS.ink },
+  scroll: { flex: 1 },
+  scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+  pageTitle: {
+    fontFamily: 'Lora_500Medium', fontSize: 30, fontWeight: '500',
+    color: COLORS.ink, marginBottom: 4,
   },
-  aiChip: {
-    backgroundColor: 'rgba(192,132,252,0.15)',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 3,
+  pageSub: { fontSize: 14, color: COLORS.ink3, marginBottom: 24 },
+  center: { alignItems: 'center', paddingVertical: 40 },
+  emptyState: { alignItems: 'center', paddingVertical: 40, paddingHorizontal: 20 },
+  emptyGlyph: { fontSize: 48, marginBottom: 16 },
+  emptyTitle: {
+    fontFamily: 'Lora_500Medium', fontSize: 22, fontWeight: '500',
+    color: COLORS.ink, marginBottom: 10, textAlign: 'center',
   },
-  aiChipText: { color: COLORS.accent, fontSize: 11, fontWeight: '600' },
-  patternDate: { color: COLORS.muted, fontSize: 12 },
-  patternText: { color: COLORS.text, fontSize: 15, lineHeight: 22, marginBottom: 14 },
-  symbolsRow: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-  patternFooter: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
-  dreamCount: { color: COLORS.muted, fontSize: 12 },
-  confidenceBar: {
-    height: 3,
-    backgroundColor: 'rgba(123,94,167,0.2)',
-    borderRadius: 2,
+  emptyBody: { fontSize: 15, color: COLORS.ink2, textAlign: 'center', lineHeight: 22 },
+  patternList: { gap: 12, marginBottom: 24 },
+  card: {
+    backgroundColor: COLORS.card, borderRadius: 20,
+    borderWidth: 1, borderColor: COLORS.line, padding: 18,
     overflow: 'hidden',
   },
-  confidenceFill: { height: '100%', backgroundColor: COLORS.accent, borderRadius: 2 },
-  emptyState: { alignItems: 'center', paddingTop: 80, paddingHorizontal: 32 },
-  emptyIcon: { fontSize: 56, marginBottom: 16 },
-  emptyTitle: { color: COLORS.text, fontSize: 20, fontWeight: '700', marginBottom: 8 },
-  emptySubtitle: { color: COLORS.muted, fontSize: 15, textAlign: 'center', lineHeight: 22 },
-  analyzeBtn: { marginTop: 24, borderRadius: 14, overflow: 'hidden' },
-  analyzeBtnGradient: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    paddingVertical: 16,
-    borderRadius: 14,
+  lockOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    alignItems: 'center', justifyContent: 'center', zIndex: 2,
+    borderRadius: 20,
   },
-  analyzeBtnText: { color: '#fff', fontSize: 16, fontWeight: '700' },
-  errorBar: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    backgroundColor: '#EF4444',
-    borderRadius: 12,
-    padding: 14,
+  unlockBtn: {
+    paddingHorizontal: 22, paddingVertical: 10, borderRadius: 20,
+    backgroundColor: COLORS.ink,
   },
-  errorText: { color: '#fff', fontSize: 14, textAlign: 'center' },
+  unlockBtnText: { fontSize: 14, fontWeight: '600', color: COLORS.bg2 },
+  confidence: {
+    fontSize: 12, color: COLORS.peach, fontWeight: '600',
+    letterSpacing: 0.5, marginBottom: 6,
+  },
+  patternTitle: {
+    fontFamily: 'Lora_500Medium', fontSize: 18, fontWeight: '500',
+    lineHeight: 24, color: COLORS.ink, marginBottom: 8,
+  },
+  patternDetail: { fontSize: 14, lineHeight: 20, color: COLORS.ink2, marginBottom: 12 },
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  pill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  pillText: { fontSize: 13, fontWeight: '500' },
+  analyzeBtn: {
+    height: 52, borderRadius: 26, backgroundColor: COLORS.ink,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  analyzeBtnText: { fontSize: 15, fontWeight: '600', color: COLORS.bg2 },
 });

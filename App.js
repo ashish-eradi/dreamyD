@@ -43,14 +43,14 @@ import {
 // =============================================================================
 
 const COLORS = {
-  background: '#0D0D1A',
-  card: '#1A1A2E',
-  primary: '#7B5EA7',
-  accent: '#C084FC',
-  gold: '#F59E0B',
-  textPrimary: '#F1F0FF',
-  textMuted: '#8B8BAE',
-  success: '#10B981',
+  background: '#f6f1e8',
+  card: '#ffffff',
+  primary: '#f4a585',
+  accent: '#d4a574',
+  gold: '#d4a574',
+  textPrimary: '#2a2622',
+  textMuted: '#8a8278',
+  success: '#8aaf94',
 };
 
 // =============================================================================
@@ -60,9 +60,9 @@ const COLORS = {
 function SplashScreen() {
   return (
     <View style={styles.splashRoot}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
       <Text style={styles.splashTitle}>DreamDiary</Text>
-      <Text style={styles.splashTagline}>Decode your dreams</Text>
+      <Text style={styles.splashTagline}>Speak it before it dissolves.</Text>
       <ActivityIndicator
         size="small"
         color={COLORS.accent}
@@ -217,7 +217,7 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
+        <StatusBar barStyle="dark-content" backgroundColor={COLORS.background} />
         <MainNavigator />
       </SafeAreaProvider>
     </GestureHandlerRootView>
@@ -238,16 +238,18 @@ const styles = StyleSheet.create({
     paddingHorizontal: 32,
   },
   splashTitle: {
-    fontSize: 42,
-    fontWeight: '800',
+    fontFamily: 'Lora_500Medium',
+    fontSize: 38,
+    fontWeight: '500',
     color: COLORS.textPrimary,
-    letterSpacing: 1,
-    marginBottom: 8,
+    letterSpacing: -0.5,
+    marginBottom: 10,
   },
   splashTagline: {
+    fontFamily: 'Lora_400Regular_Italic',
     fontSize: 16,
     color: COLORS.textMuted,
-    letterSpacing: 0.5,
+    fontStyle: 'italic',
   },
 
 });

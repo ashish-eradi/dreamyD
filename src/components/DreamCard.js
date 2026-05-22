@@ -1,42 +1,44 @@
 // =============================================================================
-// DreamDiary — DreamCard component
+// DreamDiary V3 — DreamCard component
 // =============================================================================
 // Reusable card for displaying a dream entry in lists.
+// Warm-paper aesthetic: white card, charcoal text, pastel mood/symbol pills.
 //
 // Props:
-//   dream        {object}    — dream record from Supabase / store
-//   onPress      {function}  — tap handler
-//   showDate     {boolean}   — whether to show the date line (default true)
-//   relevancePct {number}    — optional 0-100 similarity badge (Search screen)
-//   matchText    {string}    — optional highlighted snippet (Search screen)
+//   dream     {object}    — dream record from Supabase / store
+//   tags      {array}     — dream_tags array (falls back to dream.dream_tags)
+//   onPress   {function}  — tap handler
+//   showDate  {boolean}   — whether to show the date line (default true)
 // =============================================================================
 
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
-import {
-  formatDate,
-  getTopEmotion,
-  getTopSymbols,
-  truncateText,
-} from '../utils';
-import EmotionChip from './EmotionChip';
-import SymbolTag   from './SymbolTag';
+import { COLORS, getMoodStyle, getSymbolStyle } from '../constants/theme';
+import { formatDate, getTopEmotion, getTopSymbols } from '../utils';
 
 // =============================================================================
-// Color constants
+// Internal mini-components
 // =============================================================================
 
-const COLORS = {
-  bg:      '#0D0D1A',
-  card:    '#1A1A2E',
-  primary: '#7B5EA7',
-  accent:  '#C084FC',
-  gold:    '#F59E0B',
-  text:    '#F1F0FF',
-  muted:   '#8B8BAE',
-  success: '#10B981',
-};
+function MoodTile({ moodKey, size = 44 }) {
+  const style = getMoodStyle(moodKey);
+  return (
+    <View
+      style={[
+        styles.moodTile,
+        {
+          width:           size,
+          height:          size,
+          backgroundColor: style.bg,
+        },
+      ]}
+    >
+      <Text style={[styles.moodEmoji, { color: style.color }]}>
+        {style.emoji}
+      </Text>
+    </View>
+  );
+}
 
 // =============================================================================
 // Component
@@ -44,21 +46,21 @@ const COLORS = {
 
 export default function DreamCard({
   dream,
+  tags,
   onPress,
-  showDate    = true,
-  relevancePct,
-  matchText,
+  showDate = true,
 }) {
   if (!dream) return null;
 
-  const tags       = dream.dream_tags ?? [];
-  const topEmotion = getTopEmotion(tags);
-  const topSymbols = getTopSymbols(tags, 2);
-  const summary    = dream.ai_summary ?? dream.transcript ?? '';
-  const dateStr    = formatDate(dream.recorded_at ?? dream.created_at);
+  const dreamTags  = tags ?? dream.dream_tags ?? [];
+  const topEmotion = getTopEmotion(dreamTags);
+  const topSymbols = getTopSymbols(dreamTags, 3);
 
-  const showRelevance =
-    typeof relevancePct === 'number' && relevancePct >= 0;
+  const title   = dream.title ?? 'Untitled Dream';
+  const snippet = dream.ai_summary ?? dream.transcript ?? '';
+  const dateStr = formatDate(dream.recorded_at ?? dream.created_at);
+
+  const moodKey = topEmotion?.label ?? null;
 
   return (
     <TouchableOpacity
@@ -66,60 +68,52 @@ export default function DreamCard({
       activeOpacity={0.82}
       style={styles.card}
       accessibilityRole="button"
-      accessibilityLabel={`Dream recorded on ${dateStr}`}
+      accessibilityLabel={`Dream: ${title}, recorded on ${dateStr}`}
     >
-      {/* Purple left accent strip */}
-      <View style={styles.leftBorder} />
+      <View style={styles.inner}>
+        {/* Left: mood tile */}
+        <MoodTile moodKey={moodKey} size={44} />
 
-      {/* Header row: date + optional relevance badge */}
-      {(showDate || showRelevance) && (
-        <View style={styles.headerRow}>
-          {showDate ? (
-            <Text style={styles.date}>{dateStr}</Text>
-          ) : (
-            <View style={{ flex: 1 }} />
+        {/* Right: text content */}
+        <View style={styles.content}>
+          {/* Top row: title + date */}
+          <View style={styles.topRow}>
+            <Text style={styles.title} numberOfLines={1}>
+              {title}
+            </Text>
+            {showDate && (
+              <Text style={styles.date} numberOfLines={1}>
+                {dateStr}
+              </Text>
+            )}
+          </View>
+
+          {/* Snippet */}
+          {snippet.length > 0 && (
+            <Text style={styles.snippet} numberOfLines={2}>
+              {snippet}
+            </Text>
           )}
 
-          {showRelevance && (
-            <View style={styles.relevanceBadge}>
-              <Text style={styles.relevanceText}>
-                {Math.round(relevancePct)}% match
-              </Text>
+          {/* Symbols row */}
+          {topSymbols.length > 0 && (
+            <View style={styles.symbolsRow}>
+              {topSymbols.map((sym) => {
+                const symStyle = getSymbolStyle(sym.label);
+                return (
+                  <View
+                    key={sym.id ?? sym.label}
+                    style={[styles.symbolPill, { backgroundColor: symStyle.bg }]}
+                  >
+                    <Text style={[styles.symbolPillText, { color: symStyle.color }]}>
+                      {sym.label.charAt(0).toUpperCase() + sym.label.slice(1)}
+                    </Text>
+                  </View>
+                );
+              })}
             </View>
           )}
         </View>
-      )}
-
-      {/* Matched text snippet (highlighted if provided) */}
-      {matchText ? (
-        <Text style={styles.matchSnippet} numberOfLines={2}>
-          {matchText}
-        </Text>
-      ) : (
-        <Text style={styles.summary} numberOfLines={2}>
-          {truncateText(summary, 140) || 'No summary recorded.'}
-        </Text>
-      )}
-
-      {/* Bottom row: emotion chip + symbol tags + chevron */}
-      <View style={styles.bottomRow}>
-        <View style={styles.tagsRow}>
-          {topEmotion && (
-            <EmotionChip
-              emotion={topEmotion.label}
-              confidence={topEmotion.confidence_score}
-              size="sm"
-            />
-          )}
-          {topSymbols.map((sym) => (
-            <SymbolTag
-              key={sym.id ?? sym.label}
-              symbol={sym.label}
-              confidence={sym.confidence_score}
-            />
-          ))}
-        </View>
-        <Ionicons name="chevron-forward" size={16} color={COLORS.muted} />
       </View>
     </TouchableOpacity>
   );
@@ -132,94 +126,74 @@ export default function DreamCard({
 const styles = StyleSheet.create({
   card: {
     backgroundColor: COLORS.card,
-    borderRadius:    16,
-    padding:         16,
-    paddingLeft:     20,
+    borderRadius:    20,
     borderWidth:     1,
-    borderColor:     'rgba(241, 240, 255, 0.06)',
-    overflow:        'hidden',
-    shadowColor:     '#000',
-    shadowOffset:    { width: 0, height: 2 },
-    shadowOpacity:   0.18,
-    shadowRadius:    8,
-    elevation:       3,
+    borderColor:     COLORS.line,
+    padding:         18,
   },
 
-  // ── Left accent bar ──────────────────────────────────────────────────────────
-  leftBorder: {
-    position:               'absolute',
-    left:                   0,
-    top:                    0,
-    bottom:                 0,
-    width:                  3,
-    borderTopLeftRadius:    16,
-    borderBottomLeftRadius: 16,
-    backgroundColor:        '#7B5EA7',
-  },
-
-  // ── Header row ───────────────────────────────────────────────────────────────
-  headerRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'space-between',
-    marginBottom:   6,
-  },
-
-  // ── Date ─────────────────────────────────────────────────────────────────────
-  date: {
-    flex:          1,
-    fontSize:      12,
-    color:         COLORS.muted,
-    fontWeight:    '500',
-    letterSpacing: 0.2,
-  },
-
-  // ── Relevance badge ──────────────────────────────────────────────────────────
-  relevanceBadge: {
-    backgroundColor: 'rgba(16,185,129,0.15)',
-    borderRadius:    10,
-    paddingHorizontal: 8,
-    paddingVertical:   3,
-    borderWidth:     1,
-    borderColor:     'rgba(16,185,129,0.35)',
-  },
-  relevanceText: {
-    fontSize:   11,
-    fontWeight: '700',
-    color:      '#10B981',
-  },
-
-  // ── Summary ──────────────────────────────────────────────────────────────────
-  summary: {
-    fontSize:      15,
-    color:         COLORS.text,
-    fontWeight:    '600',
-    lineHeight:    21,
-    marginBottom:  12,
-    letterSpacing: 0.1,
-  },
-
-  // ── Match snippet ─────────────────────────────────────────────────────────────
-  matchSnippet: {
-    fontSize:      14,
-    color:         COLORS.accent,
-    fontWeight:    '500',
-    lineHeight:    20,
-    marginBottom:  12,
-    fontStyle:     'italic',
-  },
-
-  // ── Bottom row ───────────────────────────────────────────────────────────────
-  bottomRow: {
-    flexDirection:  'row',
-    alignItems:     'center',
-    justifyContent: 'space-between',
-  },
-  tagsRow: {
+  inner: {
     flexDirection: 'row',
-    alignItems:    'center',
-    gap:           6,
-    flex:          1,
+    alignItems:    'flex-start',
+    gap:           14,
+  },
+
+  // ── Mood tile ────────────────────────────────────────────────────────────
+  moodTile: {
+    borderRadius:   12,
+    alignItems:     'center',
+    justifyContent: 'center',
+    flexShrink:     0,
+  },
+  moodEmoji: {
+    fontSize: 18,
+    fontFamily: 'serif',
+  },
+
+  // ── Text content ─────────────────────────────────────────────────────────
+  content: {
+    flex: 1,
+    gap:  4,
+  },
+  topRow: {
+    flexDirection:  'row',
+    alignItems:     'baseline',
+    justifyContent: 'space-between',
+    gap:            8,
+  },
+  title: {
+    flex:       1,
+    fontSize:   18,
+    fontWeight: '500',
+    color:      COLORS.ink,
+    fontFamily: 'serif',
+  },
+  date: {
+    fontSize:  12,
+    color:     COLORS.ink3,
+    flexShrink: 0,
+  },
+  snippet: {
+    fontSize:   14,
+    color:      COLORS.ink2,
+    fontFamily: 'serif',
+    lineHeight: 21,
+  },
+
+  // ── Symbol pills ─────────────────────────────────────────────────────────
+  symbolsRow: {
+    flexDirection: 'row',
     flexWrap:      'wrap',
+    gap:           6,
+    marginTop:     4,
+  },
+  symbolPill: {
+    borderRadius:      20,
+    paddingHorizontal: 10,
+    paddingVertical:   4,
+  },
+  symbolPillText: {
+    fontSize:   13,
+    fontWeight: '500',
   },
 });

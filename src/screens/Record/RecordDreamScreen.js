@@ -1,11 +1,9 @@
 // =============================================================================
-// DreamDiary — RecordDreamScreen
+// DreamDiary V3 — RecordDreamScreen (Capture)
 // =============================================================================
-// Full-screen voice recording workflow:
-//   Phase 1 — Idle / pre-recording
-//   Phase 2 — Active recording (live waveform, timer)
-//   Phase 3 — Review (transcript + AI analysis preview)
-//   Phase 4 — Saving / success
+// Warm paper / cream aesthetic with a peach→gold-tint→cream gradient bg.
+// 4 phases: idle → rec → proc → done
+// Hold-to-record button at the absolute bottom.
 // =============================================================================
 
 import React, {
@@ -18,14 +16,12 @@ import {
   View,
   Text,
   TouchableOpacity,
-  TextInput,
-  ScrollView,
   StyleSheet,
   StatusBar,
   ActivityIndicator,
-  Dimensions,
   Platform,
-  KeyboardAvoidingView,
+  PanResponder,
+  Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
@@ -35,315 +31,574 @@ import Animated, {
   withSequence,
   withTiming,
   withSpring,
-  withDelay,
   Easing,
-  interpolate,
   FadeIn,
   FadeInDown,
-  FadeInUp,
   FadeOut,
   ZoomIn,
 } from 'react-native-reanimated';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
 import { useAudioRecorder } from '../../hooks/useAudioRecorder';
 import { useDreamAnalysis } from '../../hooks/useDreamAnalysis';
 import { useDreamStore } from '../../store';
 import { saveDream, saveTags, uploadAudio } from '../../services/supabase';
-import { getEmotionColor, getTopEmotion, getTopSymbols } from '../../utils';
+import { getTopEmotion, getTopSymbols } from '../../utils';
+import { COLORS, getMoodStyle, getSymbolStyle } from '../../constants/theme';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// =============================================================================
+// Constants
+// =============================================================================
+
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const COLORS = {
-  bg: '#0D0D1A',
-  card: '#1A1A2E',
-  primary: '#7B5EA7',
-  accent: '#C084FC',
-  gold: '#F59E0B',
-  text: '#F1F0FF',
-  muted: '#8B8BAE',
-  success: '#10B981',
-  error: '#EF4444',
-  recording: '#EF4444',
+const PHASES = {
+  IDLE: 'idle',
+  REC:  'rec',
+  PROC: 'proc',
+  DONE: 'done',
 };
 
-const NUM_WAVEFORM_BARS = 20;
-const WAVEFORM_BAR_WIDTH = 5;
-const WAVEFORM_BAR_GAP = 4;
-const WAVEFORM_MAX_HEIGHT = 56;
-const WAVEFORM_MIN_HEIGHT = 6;
+// =============================================================================
+// Format seconds as mm:ss
+// =============================================================================
 
-// Phases
-const PHASE = {
-  IDLE: 'IDLE',
-  RECORDING: 'RECORDING',
-  REVIEW: 'REVIEW',
-  SAVING: 'SAVING',
-  SUCCESS: 'SUCCESS',
-};
-
-// ─── Format duration ──────────────────────────────────────────────────────────
 function formatDuration(seconds) {
   const m = Math.floor(seconds / 60);
   const s = seconds % 60;
   return `${m}:${String(s).padStart(2, '0')}`;
 }
 
-// ─── MicButton (Phase 1 idle) ─────────────────────────────────────────────────
-function MicButton({ onPress }) {
-  const breathe = useSharedValue(1);
+// =============================================================================
+// Concentric breathing rings (rec phase)
+// =============================================================================
+
+function BreathingRings() {
+  const s1 = useSharedValue(1);
+  const s2 = useSharedValue(1);
+  const s3 = useSharedValue(1);
 
   useEffect(() => {
-    breathe.value = withRepeat(
+    const ease = Easing.inOut(Easing.sine);
+    s1.value = withRepeat(
       withSequence(
-        withTiming(1.08, { duration: 1600, easing: Easing.inOut(Easing.sine) }),
-        withTiming(0.96, { duration: 1600, easing: Easing.inOut(Easing.sine) }),
-      ),
-      -1,
-      false
+        withTiming(1.06, { duration: 1800, easing: ease }),
+        withTiming(0.96, { duration: 1800, easing: ease }),
+      ), -1, false
+    );
+    s2.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 300, easing: ease }),
+        withTiming(1.08, { duration: 1800, easing: ease }),
+        withTiming(0.94, { duration: 1800, easing: ease }),
+      ), -1, false
+    );
+    s3.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 600, easing: ease }),
+        withTiming(1.10, { duration: 1800, easing: ease }),
+        withTiming(0.92, { duration: 1800, easing: ease }),
+      ), -1, false
     );
   }, []);
 
-  const style = useAnimatedStyle(() => ({
-    transform: [{ scale: breathe.value }],
+  const a1 = useAnimatedStyle(() => ({
+    transform: [{ scale: s1.value }],
+    opacity: 0.50,
+  }));
+  const a2 = useAnimatedStyle(() => ({
+    transform: [{ scale: s2.value }],
+    opacity: 0.35,
+  }));
+  const a3 = useAnimatedStyle(() => ({
+    transform: [{ scale: s3.value }],
+    opacity: 0.22,
   }));
 
   return (
-    <Animated.View style={[styles.micButtonOuter, style]}>
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={onPress}
-        accessibilityRole="button"
-        accessibilityLabel="Start recording"
-        style={styles.micButtonTouchable}
-      >
-        <LinearGradient
-          colors={['#7B5EA7', '#C084FC', '#A78BFA']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.micButtonGradient}
-        >
-          <Text style={styles.micEmoji}>🎙</Text>
-        </LinearGradient>
-      </TouchableOpacity>
+    <View style={ringStyles.container}>
+      {/* Outermost ring */}
+      <Animated.View style={[ringStyles.ring, ringStyles.ring3, a3]} />
+      {/* Middle ring */}
+      <Animated.View style={[ringStyles.ring, ringStyles.ring2, a2]} />
+      {/* Inner ring */}
+      <Animated.View style={[ringStyles.ring, ringStyles.ring1, a1]} />
+      {/* Core circle */}
+      <View style={ringStyles.core} />
+    </View>
+  );
+}
+
+const ringStyles = StyleSheet.create({
+  container: {
+    width:           220,
+    height:          220,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  ring: {
+    position:     'absolute',
+    borderRadius: 999,
+    borderWidth:  1,
+    borderColor:  COLORS.peach,
+  },
+  ring1: {
+    width:  160,
+    height: 160,
+  },
+  ring2: {
+    width:  190,
+    height: 190,
+  },
+  ring3: {
+    width:  220,
+    height: 220,
+  },
+  core: {
+    width:           100,
+    height:          100,
+    borderRadius:    50,
+    backgroundColor: COLORS.peach,
+    opacity:         0.85,
+  },
+});
+
+// =============================================================================
+// Pulsing proc circle
+// =============================================================================
+
+function ProcCircle() {
+  const scale = useSharedValue(1);
+
+  useEffect(() => {
+    scale.value = withRepeat(
+      withSequence(
+        withTiming(1.10, { duration: 900, easing: Easing.inOut(Easing.sine) }),
+        withTiming(0.93, { duration: 900, easing: Easing.inOut(Easing.sine) }),
+      ), -1, false
+    );
+  }, []);
+
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
+  }));
+
+  return (
+    <Animated.View style={animStyle}>
+      <LinearGradient
+        colors={[COLORS.peach, COLORS.gold]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={procStyles.circle}
+      />
     </Animated.View>
   );
 }
 
-// ─── WaveformBar ──────────────────────────────────────────────────────────────
-/**
- * Single animated waveform bar. Each bar interpolates its height based on the
- * normalised metering level (0–1) and its own phase offset.
- */
-function WaveformBar({ index, meteringNorm, isRecording }) {
-  const heightAnim = useSharedValue(WAVEFORM_MIN_HEIGHT);
-  const idleAnim = useSharedValue(WAVEFORM_MIN_HEIGHT);
+const procStyles = StyleSheet.create({
+  circle: {
+    width:        90,
+    height:       90,
+    borderRadius: 45,
+  },
+});
 
-  // Idle gentle wave
+// =============================================================================
+// Hold-to-record button
+// =============================================================================
+
+function HoldButton({ phase, onHoldStart, onHoldEnd }) {
+  const isHeld = phase === PHASES.REC;
+
+  const scale = useSharedValue(1);
+
+  // Gentle idle breathe
   useEffect(() => {
-    const phaseDelay = (index / NUM_WAVEFORM_BARS) * 600;
-    idleAnim.value = withDelay(
-      phaseDelay,
-      withRepeat(
+    if (phase === PHASES.IDLE) {
+      scale.value = withRepeat(
         withSequence(
-          withTiming(12 + (index % 4) * 3, {
-            duration: 700 + (index % 5) * 120,
-            easing: Easing.inOut(Easing.sine),
-          }),
-          withTiming(WAVEFORM_MIN_HEIGHT, {
-            duration: 700 + (index % 5) * 120,
-            easing: Easing.inOut(Easing.sine),
-          }),
-        ),
-        -1,
-        false
-      )
-    );
-  }, [index]);
+          withTiming(1.04, { duration: 1400, easing: Easing.inOut(Easing.sine) }),
+          withTiming(0.97, { duration: 1400, easing: Easing.inOut(Easing.sine) }),
+        ), -1, false
+      );
+    } else {
+      scale.value = withSpring(isHeld ? 1.06 : 1, { damping: 10, stiffness: 120 });
+    }
+  }, [phase]);
 
-  // Update to metering value when recording
-  useEffect(() => {
-    if (!isRecording) return;
-
-    // Each bar gets a slightly different multiplier for organic look
-    const multiplier = 0.6 + ((index % 5) / 5) * 0.8;
-    const targetHeight = Math.max(
-      WAVEFORM_MIN_HEIGHT,
-      Math.min(WAVEFORM_MAX_HEIGHT, meteringNorm * WAVEFORM_MAX_HEIGHT * multiplier)
-    );
-
-    heightAnim.value = withSpring(targetHeight, {
-      damping: 8,
-      stiffness: 120,
-    });
-  }, [meteringNorm, isRecording, index]);
-
-  const barStyle = useAnimatedStyle(() => {
-    const h = isRecording ? heightAnim.value : idleAnim.value;
-    return {
-      height: h,
-      opacity: isRecording
-        ? interpolate(h, [WAVEFORM_MIN_HEIGHT, WAVEFORM_MAX_HEIGHT], [0.5, 1])
-        : 0.4,
-    };
-  });
-
-  // Color: accent when recording, muted when idle
-  const barColor = isRecording ? COLORS.accent : COLORS.muted;
-
-  return (
-    <Animated.View
-      style={[
-        styles.waveformBar,
-        {
-          width: WAVEFORM_BAR_WIDTH,
-          borderRadius: WAVEFORM_BAR_WIDTH / 2,
-          backgroundColor: barColor,
-          marginHorizontal: WAVEFORM_BAR_GAP / 2,
-        },
-        barStyle,
-      ]}
-    />
-  );
-}
-
-// ─── Waveform ─────────────────────────────────────────────────────────────────
-function Waveform({ metering, isRecording }) {
-  // Normalise metering from dB range (-160 to 0) to 0–1
-  const meteringNorm = Math.max(0, Math.min(1, (metering + 80) / 80));
-
-  return (
-    <View style={styles.waveformContainer}>
-      {Array.from({ length: NUM_WAVEFORM_BARS }, (_, i) => (
-        <WaveformBar
-          key={i}
-          index={i}
-          meteringNorm={meteringNorm}
-          isRecording={isRecording}
-        />
-      ))}
-    </View>
-  );
-}
-
-// ─── RecordingDot ─────────────────────────────────────────────────────────────
-function RecordingDot() {
-  const opacity = useSharedValue(1);
-
-  useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(0.1, { duration: 500 }),
-        withTiming(1, { duration: 500 }),
-      ),
-      -1,
-      false
-    );
-  }, []);
-
-  const style = useAnimatedStyle(() => ({
-    opacity: opacity.value,
+  const animStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: scale.value }],
   }));
 
-  return <Animated.View style={[styles.recordingDot, style]} />;
-}
+  // PanResponder for press-and-hold
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder:  () => false,
+      onPanResponderGrant: () => {
+        onHoldStart();
+      },
+      onPanResponderRelease: () => {
+        onHoldEnd();
+      },
+      onPanResponderTerminate: () => {
+        onHoldEnd();
+      },
+    })
+  ).current;
 
-// ─── VividnessBar ─────────────────────────────────────────────────────────────
-function VividnessBar({ score }) {
-  const width = useSharedValue(0);
-
-  useEffect(() => {
-    width.value = withTiming(score / 10, {
-      duration: 900,
-      easing: Easing.out(Easing.ease),
-    });
-  }, [score]);
-
-  const barStyle = useAnimatedStyle(() => ({
-    width: `${width.value * 100}%`,
-  }));
-
-  const color =
-    score >= 8 ? COLORS.success : score >= 5 ? COLORS.gold : COLORS.accent;
+  const isActive = isHeld;
 
   return (
-    <View style={styles.vividnessTrack}>
+    <View style={holdStyles.wrap}>
       <Animated.View
-        style={[styles.vividnessFill, { backgroundColor: color }, barStyle]}
-      />
-    </View>
-  );
-}
-
-// ─── EmotionChip ──────────────────────────────────────────────────────────────
-function EmotionChip({ label }) {
-  const color = getEmotionColor(label);
-  return (
-    <View
-      style={[
-        styles.emotionChip,
-        {
-          backgroundColor: color + '28',
-          borderColor: color + '60',
-        },
-      ]}
-    >
-      <Text style={[styles.emotionChipText, { color }]}>
-        {label.charAt(0).toUpperCase() + label.slice(1)}
+        style={[
+          holdStyles.button,
+          isActive
+            ? {
+                backgroundColor: COLORS.peach,
+                shadowColor:     COLORS.peach,
+                shadowOpacity:   0.5,
+                shadowRadius:    24,
+              }
+            : {
+                backgroundColor: COLORS.ink,
+                shadowColor:     '#000',
+                shadowOpacity:   0.30,
+                shadowRadius:    16,
+              },
+          animStyle,
+        ]}
+        {...panResponder.panHandlers}
+      >
+        {/* Mic SVG-ish icon via Unicode */}
+        <Text style={holdStyles.micIcon}>♪</Text>
+      </Animated.View>
+      <Text style={holdStyles.label}>
+        {isActive ? 'Release to finish' : 'Hold to record'}
       </Text>
     </View>
   );
 }
 
-// ─── SymbolTag ────────────────────────────────────────────────────────────────
-function SymbolTag({ label }) {
+const holdStyles = StyleSheet.create({
+  wrap: {
+    alignItems: 'center',
+    gap:        10,
+  },
+  button: {
+    width:          96,
+    height:         96,
+    borderRadius:   48,
+    alignItems:     'center',
+    justifyContent: 'center',
+    shadowOffset:   { width: 0, height: 8 },
+    elevation:      10,
+  },
+  micIcon: {
+    fontSize: 36,
+    color:    COLORS.bg2,
+  },
+  label: {
+    fontSize:  13,
+    color:     COLORS.ink3,
+    fontWeight: '500',
+  },
+});
+
+// =============================================================================
+// Phase: Idle
+// =============================================================================
+
+function IdlePhase() {
   return (
-    <View style={styles.symbolTag}>
-      <Text style={styles.symbolTagText}>#{label}</Text>
-    </View>
-  );
-}
-
-// ─── SuccessAnimation ─────────────────────────────────────────────────────────
-function SuccessAnimation() {
-  const scale = useSharedValue(0);
-  const opacity = useSharedValue(0);
-
-  useEffect(() => {
-    scale.value = withSpring(1, { damping: 10, stiffness: 100 });
-    opacity.value = withTiming(1, { duration: 300 });
-  }, []);
-
-  const style = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-    opacity: opacity.value,
-  }));
-
-  return (
-    <Animated.View style={[styles.successContainer, style]}>
-      <LinearGradient
-        colors={['rgba(16,185,129,0.25)', 'rgba(16,185,129,0.10)']}
-        style={styles.successCircle}
-      >
-        <Text style={styles.successCheck}>✓</Text>
-      </LinearGradient>
-      <Text style={styles.successTitle}>Dream saved!</Text>
-      <Text style={styles.successSubtitle}>Opening your dream...</Text>
+    <Animated.View
+      entering={FadeIn.duration(350)}
+      exiting={FadeOut.duration(200)}
+      style={phaseStyles.centered}
+    >
+      <Text style={phaseStyles.headline}>
+        {'Speak it before\nit dissolves.'}
+      </Text>
+      <Text style={phaseStyles.sub}>
+        Hold the button below. Talk it through — we'll transcribe and tag it.
+      </Text>
     </Animated.View>
   );
 }
 
-// ─── RecordDreamScreen ────────────────────────────────────────────────────────
+// =============================================================================
+// Phase: Rec
+// =============================================================================
+
+function RecPhase({ duration }) {
+  return (
+    <Animated.View
+      entering={FadeIn.duration(300)}
+      exiting={FadeOut.duration(200)}
+      style={phaseStyles.centered}
+    >
+      <BreathingRings />
+      <Text style={[phaseStyles.sub, { marginTop: 24, fontStyle: 'italic' }]}>
+        I'm listening…
+      </Text>
+      <Text style={phaseStyles.timer}>{formatDuration(duration)}</Text>
+    </Animated.View>
+  );
+}
+
+// =============================================================================
+// Phase: Proc
+// =============================================================================
+
+function ProcPhase() {
+  return (
+    <Animated.View
+      entering={FadeIn.duration(300)}
+      exiting={FadeOut.duration(200)}
+      style={phaseStyles.centered}
+    >
+      <ProcCircle />
+      <Text style={[phaseStyles.headline, { marginTop: 28, fontSize: 22 }]}>
+        Reading the stars…
+      </Text>
+      <Text style={phaseStyles.procSub}>
+        Transcribing · tagging · shelving
+      </Text>
+    </Animated.View>
+  );
+}
+
+// =============================================================================
+// Phase: Done
+// =============================================================================
+
+function DonePhase({ analysis, transcript, onSave, onReRecord }) {
+  const tags       = analysis?.tags ?? [];
+  const topEmotion = getTopEmotion(tags);
+  const topSymbols = getTopSymbols(tags, 3);
+  const moodStyle  = getMoodStyle(topEmotion?.label ?? null);
+
+  const summary = analysis?.summary ?? transcript ?? '';
+  const title   = analysis?.title   ?? 'The amber library';
+
+  return (
+    <Animated.View
+      entering={ZoomIn.duration(400)}
+      style={phaseStyles.doneWrap}
+    >
+      {/* White card */}
+      <View style={doneStyles.card}>
+        {/* Title */}
+        <Text style={doneStyles.cardTitle}>{title}</Text>
+
+        {/* Quote text with left border */}
+        <View style={doneStyles.quoteWrap}>
+          <View style={doneStyles.quoteBorder} />
+          <Text style={doneStyles.quoteText} numberOfLines={6}>
+            {summary || 'Your dream has been captured.'}
+          </Text>
+        </View>
+
+        {/* Mood + symbol pills */}
+        <View style={doneStyles.pillsRow}>
+          {topEmotion && (
+            <View
+              style={[doneStyles.moodPill, { backgroundColor: moodStyle.bg }]}
+            >
+              <View
+                style={[doneStyles.moodDot, { backgroundColor: moodStyle.color }]}
+              />
+              <Text style={[doneStyles.pillText, { color: moodStyle.color }]}>
+                {moodStyle.label}
+              </Text>
+            </View>
+          )}
+          {topSymbols.map((sym) => {
+            const symStyle = getSymbolStyle(sym.label);
+            return (
+              <View
+                key={sym.id ?? sym.label}
+                style={[doneStyles.symbolPill, { backgroundColor: symStyle.bg }]}
+              >
+                <Text style={[doneStyles.pillText, { color: symStyle.color }]}>
+                  {sym.label.charAt(0).toUpperCase() + sym.label.slice(1)}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+
+        {/* Save button */}
+        <TouchableOpacity
+          onPress={onSave}
+          activeOpacity={0.88}
+          style={doneStyles.saveBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Save to journal"
+        >
+          <Text style={doneStyles.saveBtnText}>Save to journal</Text>
+        </TouchableOpacity>
+
+        {/* Re-record ghost button */}
+        <TouchableOpacity
+          onPress={onReRecord}
+          activeOpacity={0.75}
+          style={doneStyles.reRecordBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Re-record"
+        >
+          <Text style={doneStyles.reRecordBtnText}>Re-record</Text>
+        </TouchableOpacity>
+      </View>
+    </Animated.View>
+  );
+}
+
+const doneStyles = StyleSheet.create({
+  card: {
+    backgroundColor: COLORS.card,
+    borderRadius:    20,
+    padding:         22,
+    width:           '100%',
+    maxWidth:        340,
+    gap:             14,
+  },
+  cardTitle: {
+    fontSize:   22,
+    fontWeight: '500',
+    color:      COLORS.ink,
+    fontFamily: 'serif',
+  },
+  quoteWrap: {
+    flexDirection: 'row',
+    gap:           12,
+  },
+  quoteBorder: {
+    width:           3,
+    borderRadius:    2,
+    backgroundColor: COLORS.peach,
+    flexShrink:      0,
+  },
+  quoteText: {
+    flex:       1,
+    fontSize:   15,
+    color:      COLORS.ink2,
+    fontFamily: 'serif',
+    lineHeight: 24,
+  },
+  pillsRow: {
+    flexDirection: 'row',
+    flexWrap:      'wrap',
+    gap:           8,
+  },
+  moodPill: {
+    flexDirection:     'row',
+    alignItems:        'center',
+    borderRadius:      20,
+    paddingVertical:   4,
+    paddingHorizontal: 10,
+    gap:               6,
+  },
+  moodDot: {
+    width:        6,
+    height:       6,
+    borderRadius: 3,
+  },
+  symbolPill: {
+    borderRadius:      20,
+    paddingVertical:   4,
+    paddingHorizontal: 10,
+  },
+  pillText: {
+    fontSize:   13,
+    fontWeight: '500',
+  },
+  saveBtn: {
+    backgroundColor: COLORS.ink,
+    borderRadius:    999,
+    height:          48,
+    alignItems:      'center',
+    justifyContent:  'center',
+  },
+  saveBtnText: {
+    fontSize:   15,
+    fontWeight: '500',
+    color:      COLORS.bg2,
+  },
+  reRecordBtn: {
+    backgroundColor: COLORS.card,
+    borderRadius:    999,
+    height:          44,
+    alignItems:      'center',
+    justifyContent:  'center',
+    borderWidth:     1,
+    borderColor:     COLORS.line2,
+  },
+  reRecordBtnText: {
+    fontSize:   14,
+    fontWeight: '500',
+    color:      COLORS.ink,
+  },
+});
+
+// Shared phase layout styles
+const phaseStyles = StyleSheet.create({
+  centered: {
+    flex:           1,
+    alignItems:     'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    gap:            16,
+  },
+  doneWrap: {
+    flex:              1,
+    alignItems:        'center',
+    justifyContent:    'center',
+    paddingHorizontal: 20,
+  },
+  headline: {
+    fontSize:   26,
+    fontWeight: '500',
+    color:      COLORS.ink,
+    fontFamily: 'serif',
+    textAlign:  'center',
+    lineHeight: 36,
+  },
+  sub: {
+    fontSize:  16,
+    color:     COLORS.ink2,
+    textAlign: 'center',
+    lineHeight: 26,
+  },
+  timer: {
+    fontSize:   22,
+    fontWeight: '600',
+    color:      COLORS.ink,
+    letterSpacing: 1,
+    fontVariant: ['tabular-nums'],
+  },
+  procSub: {
+    fontSize:  13,
+    color:     COLORS.ink3,
+    textAlign: 'center',
+    marginTop: 8,
+  },
+});
+
+// =============================================================================
+// RecordDreamScreen
+// =============================================================================
+
 export default function RecordDreamScreen({ navigation }) {
-  const user = useDreamStore((s) => s.user);
-  const addDream = useDreamStore((s) => s.addDream);
+  const user            = useDreamStore((s) => s.user);
+  const addDream        = useDreamStore((s) => s.addDream);
   const setCurrentDream = useDreamStore((s) => s.setCurrentDream);
 
   const {
     isRecording,
     audioUri,
     duration,
-    metering,
     startRecording,
     stopRecording,
     clearRecording,
@@ -359,16 +614,13 @@ export default function RecordDreamScreen({ navigation }) {
     reset: resetAnalysis,
   } = useDreamAnalysis();
 
-  const [phase, setPhase] = useState(PHASE.IDLE);
-  const [editingTranscript, setEditingTranscript] = useState(false);
-  const [editedTranscript, setEditedTranscript] = useState('');
+  const [phase,    setPhase]    = useState(PHASES.IDLE);
   const [saveError, setSaveError] = useState(null);
-  const [savedDream, setSavedDream] = useState(null);
 
-  const savedDreamRef = useRef(null);
-  const autoNavigateTimer = useRef(null);
+  const savedDreamRef      = useRef(null);
+  const autoNavigateTimer  = useRef(null);
 
-  // ── Cleanup on unmount ────────────────────────────────────────────────────
+  // ── Cleanup ──────────────────────────────────────────────────────────────
   useEffect(() => {
     return () => {
       if (autoNavigateTimer.current) clearTimeout(autoNavigateTimer.current);
@@ -376,55 +628,47 @@ export default function RecordDreamScreen({ navigation }) {
     };
   }, []);
 
-  // ── Watch transcript changes from analysis hook ───────────────────────────
+  // ── Watch for analysis completion → move to done ─────────────────────────
   useEffect(() => {
-    if (transcript) {
-      setEditedTranscript(transcript);
+    if (phase === PHASES.PROC && !isTranscribing && !isAnalyzing && (transcript || analysis)) {
+      setPhase(PHASES.DONE);
     }
-  }, [transcript]);
+  }, [phase, isTranscribing, isAnalyzing, transcript, analysis]);
 
-  // ── Handle phase 2 → 3 transition (transcription starts automatically) ───
-  const handleStartRecording = useCallback(async () => {
+  // ── Hold start → begin recording ────────────────────────────────────────
+  const handleHoldStart = useCallback(async () => {
+    if (phase !== PHASES.IDLE) return;
     setSaveError(null);
     await startRecording();
-    setPhase(PHASE.RECORDING);
-  }, [startRecording]);
+    setPhase(PHASES.REC);
+  }, [phase, startRecording]);
 
-  const handleStopRecording = useCallback(async () => {
+  // ── Hold end → stop recording + start analysis ───────────────────────────
+  const handleHoldEnd = useCallback(async () => {
+    if (phase !== PHASES.REC) return;
     const uri = await stopRecording();
     if (!uri) {
-      setPhase(PHASE.IDLE);
+      setPhase(PHASES.IDLE);
       return;
     }
-    setPhase(PHASE.REVIEW);
-    // Kick off transcription + analysis automatically
+    setPhase(PHASES.PROC);
     await analyzeAudio(uri);
-  }, [stopRecording, analyzeAudio]);
+  }, [phase, stopRecording, analyzeAudio]);
 
-  // ── Re-record ─────────────────────────────────────────────────────────────
+  // ── Re-record ────────────────────────────────────────────────────────────
   const handleReRecord = useCallback(() => {
     clearRecording();
     resetAnalysis();
-    setEditingTranscript(false);
-    setEditedTranscript('');
     setSaveError(null);
-    setPhase(PHASE.IDLE);
+    setPhase(PHASES.IDLE);
   }, [clearRecording, resetAnalysis]);
 
-  // ── Save dream ────────────────────────────────────────────────────────────
+  // ── Save dream ───────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     if (!user?.id) return;
-
     setSaveError(null);
-    setPhase(PHASE.SAVING);
 
     try {
-      const finalTranscript =
-        editingTranscript && editedTranscript.trim()
-          ? editedTranscript.trim()
-          : transcript ?? editedTranscript.trim() ?? '';
-
-      // Upload audio (non-blocking best-effort)
       let audioUrl = null;
       if (audioUri) {
         try {
@@ -434,27 +678,25 @@ export default function RecordDreamScreen({ navigation }) {
         }
       }
 
-      // Prepare dream row
       const dreamPayload = {
-        user_id: user.id,
-        transcript: finalTranscript,
-        audio_url: audioUrl,
-        recorded_at: new Date().toISOString(),
-        ai_summary: analysis?.summary ?? null,
+        user_id:         user.id,
+        transcript:      transcript ?? '',
+        audio_url:       audioUrl,
+        recorded_at:     new Date().toISOString(),
+        ai_summary:      analysis?.summary ?? null,
         vividness_score: analysis?.vividness_score ?? null,
-        title: analysis?.title ?? null,
-        is_favourite: false,
+        title:           analysis?.title ?? null,
+        is_favourite:    false,
       };
 
       const newDream = await saveDream(dreamPayload);
 
-      // Save tags if analysis produced them
       if (analysis?.tags?.length > 0 && newDream?.id) {
         try {
           const tagsPayload = analysis.tags.map((tag) => ({
-            dream_id: newDream.id,
-            type: tag.type,
-            label: tag.label,
+            dream_id:         newDream.id,
+            type:             tag.type,
+            label:            tag.label,
             confidence_score: tag.confidence_score ?? null,
           }));
           const savedTags = await saveTags(tagsPayload);
@@ -464,839 +706,199 @@ export default function RecordDreamScreen({ navigation }) {
         }
       }
 
-      // Update store
       addDream(newDream);
       setCurrentDream(newDream);
-      setSavedDream(newDream);
       savedDreamRef.current = newDream;
 
-      setPhase(PHASE.SUCCESS);
-
-      // Auto-navigate to DreamDetail after 1.5s
+      // Navigate to DreamDetail after brief delay
       autoNavigateTimer.current = setTimeout(() => {
         if (savedDreamRef.current) {
           navigation.replace('DreamDetail', { dreamId: savedDreamRef.current.id });
         }
-      }, 1500);
+      }, 300);
     } catch (err) {
       console.error('[RecordDreamScreen] Save failed:', err);
       setSaveError(err?.message ?? 'Failed to save dream. Please try again.');
-      setPhase(PHASE.REVIEW);
     }
   }, [
     user?.id,
     audioUri,
     transcript,
-    editedTranscript,
-    editingTranscript,
     analysis,
     addDream,
     setCurrentDream,
     navigation,
   ]);
 
-  // ── Render phases ─────────────────────────────────────────────────────────
+  // ── Close handler ─────────────────────────────────────────────────────────
+  const handleClose = useCallback(async () => {
+    if (isRecording) {
+      await stopRecording();
+    }
+    clearRecording();
+    resetAnalysis();
+    navigation.goBack();
+  }, [isRecording, stopRecording, clearRecording, resetAnalysis, navigation]);
 
-  const renderPhaseIdle = () => (
-    <Animated.View
-      entering={FadeIn.duration(400)}
-      exiting={FadeOut.duration(200)}
-      style={styles.phaseContainer}
-    >
-      <View style={styles.idleIconArea}>
-        <Text style={styles.idleMoonEmoji}>🌙</Text>
-      </View>
-      <Text style={styles.idleTitle}>Tap to start recording</Text>
-      <Text style={styles.idleSubtitle}>
-        Speak your dream out loud.{'\n'}We'll transcribe and analyze it automatically.
-      </Text>
-      <MicButton onPress={handleStartRecording} />
-      <Text style={styles.idleHint}>Hold the thought — tap when ready</Text>
-    </Animated.View>
-  );
+  // ── Phase label in header ─────────────────────────────────────────────────
+  const phaseLabel = {
+    [PHASES.IDLE]: 'Capture a dream',
+    [PHASES.REC]:  formatDuration(duration),
+    [PHASES.PROC]: 'Listening to your stars…',
+    [PHASES.DONE]: 'Your dream',
+  }[phase];
 
-  const renderPhaseRecording = () => (
-    <Animated.View
-      entering={FadeIn.duration(300)}
-      exiting={FadeOut.duration(200)}
-      style={styles.phaseContainer}
-    >
-      {/* Recording indicator */}
-      <View style={styles.recordingIndicatorRow}>
-        <RecordingDot />
-        <Text style={styles.recordingLabel}>Recording...</Text>
-      </View>
+  const showHoldButton = phase === PHASES.IDLE || phase === PHASES.REC;
 
-      {/* Timer */}
-      <Text style={styles.durationTimer}>{formatDuration(duration)}</Text>
-
-      {/* Live waveform */}
-      <View style={styles.waveformSection}>
-        <Waveform metering={metering} isRecording={isRecording} />
-      </View>
-
-      <Text style={styles.recordingTip}>
-        Describe everything you remember — people, places, feelings
-      </Text>
-
-      {/* Stop button */}
-      <TouchableOpacity
-        activeOpacity={0.85}
-        onPress={handleStopRecording}
-        style={styles.stopButtonOuter}
-        accessibilityRole="button"
-        accessibilityLabel="Stop recording"
-      >
-        <View style={styles.stopButton}>
-          <View style={styles.stopButtonSquare} />
-        </View>
-        <Text style={styles.stopButtonLabel}>Stop Recording</Text>
-      </TouchableOpacity>
-    </Animated.View>
-  );
-
-  const renderPhaseReview = () => {
-    const isProcessing = isTranscribing || isAnalyzing;
-    const topEmotion =
-      analysis?.tags ? getTopEmotion(analysis.tags) : null;
-    const topSymbols =
-      analysis?.tags ? getTopSymbols(analysis.tags, 3) : [];
-
-    return (
-      <Animated.View
-        entering={FadeIn.duration(400)}
-        style={[styles.phaseContainer, { flex: 1 }]}
-      >
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          style={{ flex: 1 }}
-        >
-          <ScrollView
-            contentContainerStyle={styles.reviewScrollContent}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-            {/* Transcript card */}
-            <View style={styles.transcriptCard}>
-              <View style={styles.transcriptHeader}>
-                <Text style={styles.transcriptLabel}>Transcript</Text>
-                {!isTranscribing && transcript && !editingTranscript && (
-                  <TouchableOpacity
-                    onPress={() => {
-                      setEditingTranscript(true);
-                      setEditedTranscript(transcript);
-                    }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Edit transcript"
-                  >
-                    <Text style={styles.editLink}>Edit ✏️</Text>
-                  </TouchableOpacity>
-                )}
-                {editingTranscript && (
-                  <TouchableOpacity
-                    onPress={() => setEditingTranscript(false)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Done editing"
-                  >
-                    <Text style={styles.doneEditLink}>Done</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-
-              {isTranscribing ? (
-                <View style={styles.transcribingState}>
-                  <ActivityIndicator color={COLORS.accent} size="small" />
-                  <Text style={styles.transcribingText}>Transcribing...</Text>
-                </View>
-              ) : editingTranscript ? (
-                <TextInput
-                  style={styles.transcriptInput}
-                  value={editedTranscript}
-                  onChangeText={setEditedTranscript}
-                  multiline
-                  autoFocus
-                  placeholderTextColor={COLORS.muted}
-                  placeholder="Edit your dream transcript..."
-                  selectionColor={COLORS.accent}
-                />
-              ) : (
-                <Text style={styles.transcriptText}>
-                  {editedTranscript || transcript || 'No transcript available.'}
-                </Text>
-              )}
-            </View>
-
-            {/* Analysis card */}
-            {(isAnalyzing || analysis) && (
-              <Animated.View
-                entering={FadeInDown.delay(100).duration(400)}
-                style={styles.analysisCard}
-              >
-                <Text style={styles.analysisLabel}>Dream Analysis</Text>
-
-                {isAnalyzing ? (
-                  <View style={styles.analyzingState}>
-                    <ActivityIndicator color={COLORS.accent} size="small" />
-                    <Text style={styles.analyzingText}>Analyzing dream...</Text>
-                  </View>
-                ) : analysis ? (
-                  <View style={styles.analysisContent}>
-                    {/* Vividness */}
-                    {analysis.vividness_score != null && (
-                      <View style={styles.vividnessRow}>
-                        <Text style={styles.vividnessLabel}>Vividness</Text>
-                        <Text style={styles.vividnessScore}>
-                          {analysis.vividness_score}
-                          <Text style={styles.vividnessMax}>/10</Text>
-                        </Text>
-                      </View>
-                    )}
-                    {analysis.vividness_score != null && (
-                      <VividnessBar score={analysis.vividness_score} />
-                    )}
-
-                    {/* AI summary */}
-                    {analysis.summary && (
-                      <Text style={styles.analysisSummary}>
-                        {analysis.summary}
-                      </Text>
-                    )}
-
-                    {/* Emotion + symbol tags */}
-                    {(topEmotion || topSymbols.length > 0) && (
-                      <View style={styles.tagRow}>
-                        {topEmotion && <EmotionChip label={topEmotion.label} />}
-                        {topSymbols.map((sym, i) => (
-                          <SymbolTag
-                            key={sym.id ?? `${sym.label}-${i}`}
-                            label={sym.label}
-                          />
-                        ))}
-                      </View>
-                    )}
-                  </View>
-                ) : null}
-              </Animated.View>
-            )}
-
-            {/* Analysis error */}
-            {analysisError && (
-              <View style={styles.errorCard}>
-                <Text style={styles.errorText}>{analysisError.message}</Text>
-              </View>
-            )}
-
-            {/* Save error */}
-            {saveError && (
-              <View style={styles.errorCard}>
-                <Text style={styles.errorText}>{saveError}</Text>
-              </View>
-            )}
-
-            {/* Actions */}
-            {!isTranscribing && (transcript || editedTranscript) && (
-              <Animated.View
-                entering={FadeInUp.delay(200).duration(400)}
-                style={styles.reviewActions}
-              >
-                {/* Save button */}
-                <TouchableOpacity
-                  activeOpacity={0.85}
-                  onPress={handleSave}
-                  disabled={isAnalyzing}
-                  style={styles.saveButtonOuter}
-                  accessibilityRole="button"
-                  accessibilityLabel="Save dream"
-                >
-                  <LinearGradient
-                    colors={
-                      isAnalyzing
-                        ? ['#2D6E55', '#1D4E3D']
-                        : ['#059669', '#10B981']
-                    }
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.saveButtonGradient}
-                  >
-                    <Text style={styles.saveButtonText}>
-                      {isAnalyzing ? 'Wait for analysis...' : 'Save Dream'}
-                    </Text>
-                  </LinearGradient>
-                </TouchableOpacity>
-
-                {/* Re-record button */}
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  onPress={handleReRecord}
-                  style={styles.reRecordButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Re-record dream"
-                >
-                  <Text style={styles.reRecordButtonText}>↺ Re-record</Text>
-                </TouchableOpacity>
-              </Animated.View>
-            )}
-
-            {/* No transcript yet — show re-record option */}
-            {!isTranscribing && !transcript && !editedTranscript && (
-              <View style={styles.reviewActions}>
-                <TouchableOpacity
-                  activeOpacity={0.75}
-                  onPress={handleReRecord}
-                  style={styles.reRecordButton}
-                  accessibilityRole="button"
-                  accessibilityLabel="Re-record dream"
-                >
-                  <Text style={styles.reRecordButtonText}>↺ Try again</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-
-            <View style={{ height: 40 }} />
-          </ScrollView>
-        </KeyboardAvoidingView>
-      </Animated.View>
-    );
-  };
-
-  const renderPhaseSaving = () => (
-    <Animated.View
-      entering={FadeIn.duration(300)}
-      style={styles.phaseContainer}
-    >
-      <View style={styles.savingContainer}>
-        <ActivityIndicator color={COLORS.accent} size="large" />
-        <Text style={styles.savingText}>Saving your dream...</Text>
-        <Text style={styles.savingSubtext}>Just a moment</Text>
-      </View>
-    </Animated.View>
-  );
-
-  const renderPhaseSuccess = () => (
-    <Animated.View
-      entering={ZoomIn.duration(400)}
-      style={styles.phaseContainer}
-    >
-      <SuccessAnimation />
-    </Animated.View>
-  );
-
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+      <StatusBar barStyle="dark-content" />
 
       {/* Background gradient */}
       <LinearGradient
-        colors={['rgba(123,94,167,0.15)', 'transparent', COLORS.bg]}
-        locations={[0, 0.4, 1]}
+        colors={['#fde8dc', '#f5e8d4', '#ece5d6']}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 0, y: 1 }}
         style={StyleSheet.absoluteFill}
-        pointerEvents="none"
       />
 
       <SafeAreaView style={styles.safeArea}>
-        {/* ── Screen header ── */}
-        <Animated.View entering={FadeIn.duration(350)} style={styles.screenHeader}>
-          {phase !== PHASE.SUCCESS ? (
-            <TouchableOpacity
-              onPress={() => {
-                if (phase === PHASE.RECORDING) {
-                  // Stop recording before leaving
-                  stopRecording().then(() => {
-                    clearRecording();
-                    navigation.goBack();
-                  });
-                } else {
-                  clearRecording();
-                  resetAnalysis();
-                  navigation.goBack();
-                }
-              }}
-              style={styles.closeButton}
-              accessibilityRole="button"
-              accessibilityLabel="Close"
-            >
-              <Text style={styles.closeIcon}>✕</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.closeButton} />
-          )}
+        {/* ── Header ── */}
+        <Animated.View entering={FadeIn.duration(350)} style={styles.header}>
+          {/* Close button */}
+          <TouchableOpacity
+            onPress={handleClose}
+            style={styles.closeBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Close"
+          >
+            <Text style={styles.closeBtnText}>×</Text>
+          </TouchableOpacity>
 
-          <Text style={styles.screenTitle}>
-            {phase === PHASE.IDLE && 'Record Dream'}
-            {phase === PHASE.RECORDING && 'Recording'}
-            {phase === PHASE.REVIEW && 'Review Dream'}
-            {phase === PHASE.SAVING && 'Saving...'}
-            {phase === PHASE.SUCCESS && 'Saved!'}
-          </Text>
+          {/* Phase label */}
+          <Text style={styles.phaseLabel}>{phaseLabel}</Text>
 
-          <View style={{ width: 40 }} />
+          {/* Spacer */}
+          <View style={styles.headerSpacer} />
         </Animated.View>
 
         {/* ── Phase content ── */}
-        <View style={styles.phaseWrapper}>
-          {phase === PHASE.IDLE && renderPhaseIdle()}
-          {phase === PHASE.RECORDING && renderPhaseRecording()}
-          {phase === PHASE.REVIEW && renderPhaseReview()}
-          {phase === PHASE.SAVING && renderPhaseSaving()}
-          {phase === PHASE.SUCCESS && renderPhaseSuccess()}
+        <View style={styles.phaseArea}>
+          {phase === PHASES.IDLE && <IdlePhase />}
+          {phase === PHASES.REC  && <RecPhase duration={duration} />}
+          {phase === PHASES.PROC && <ProcPhase />}
+          {phase === PHASES.DONE && (
+            <DonePhase
+              analysis={analysis}
+              transcript={transcript}
+              onSave={handleSave}
+              onReRecord={handleReRecord}
+            />
+          )}
         </View>
+
+        {/* ── Save error ── */}
+        {saveError && (
+          <View style={styles.errorBanner}>
+            <Text style={styles.errorText}>{saveError}</Text>
+          </View>
+        )}
+
+        {/* ── Hold-to-record button ── */}
+        {showHoldButton && (
+          <View style={styles.holdWrap}>
+            <HoldButton
+              phase={phase}
+              onHoldStart={handleHoldStart}
+              onHoldEnd={handleHoldEnd}
+            />
+          </View>
+        )}
       </SafeAreaView>
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
+// =============================================================================
+// Styles
+// =============================================================================
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: COLORS.bg,
   },
   safeArea: {
     flex: 1,
   },
 
-  // Screen header
-  screenHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  // ── Header ──────────────────────────────────────────────────────────────────
+  header: {
+    position:       'absolute',
+    top:            Platform.OS === 'ios' ? 56 : 32,
+    left:           0,
+    right:          0,
+    flexDirection:  'row',
+    alignItems:     'center',
     justifyContent: 'space-between',
     paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 8,
+    zIndex:         10,
   },
-  closeButton: {
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: 'rgba(139,139,174,0.15)',
-    borderRadius: 20,
+  closeBtn: {
+    width:           36,
+    height:          36,
+    borderRadius:    18,
+    backgroundColor: 'rgba(255,255,255,0.60)',
+    alignItems:      'center',
+    justifyContent:  'center',
   },
-  closeIcon: {
-    fontSize: 16,
-    color: COLORS.muted,
-    fontWeight: '700',
+  closeBtnText: {
+    fontSize:   22,
+    color:      COLORS.ink,
+    fontWeight: '400',
+    lineHeight: 26,
   },
-  screenTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: COLORS.text,
-    letterSpacing: 0.3,
-  },
-
-  // Phase wrapper
-  phaseWrapper: {
-    flex: 1,
-  },
-  phaseContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 24,
-  },
-
-  // ── Phase 1: Idle ──────────────────────────────────────────────────────────
-  idleIconArea: {
-    marginBottom: 16,
-  },
-  idleMoonEmoji: {
-    fontSize: 52,
-  },
-  idleTitle: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: COLORS.text,
-    textAlign: 'center',
-    marginBottom: 12,
-    letterSpacing: 0.2,
-  },
-  idleSubtitle: {
-    fontSize: 15,
-    color: COLORS.muted,
-    textAlign: 'center',
-    lineHeight: 23,
-    marginBottom: 32,
-    paddingHorizontal: 12,
-  },
-  micButtonOuter: {
-    borderRadius: 55,
-    shadowColor: COLORS.accent,
-    shadowOffset: { width: 0, height: 10 },
-    shadowOpacity: 0.55,
-    shadowRadius: 22,
-    elevation: 16,
-    marginBottom: 20,
-  },
-  micButtonTouchable: {
-    borderRadius: 55,
-    overflow: 'hidden',
-  },
-  micButtonGradient: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  micEmoji: {
-    fontSize: 46,
-  },
-  idleHint: {
-    fontSize: 13,
-    color: 'rgba(139,139,174,0.6)',
-    textAlign: 'center',
-  },
-
-  // ── Phase 2: Recording ─────────────────────────────────────────────────────
-  recordingIndicatorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  recordingDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: COLORS.recording,
-    marginRight: 8,
-  },
-  recordingLabel: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: COLORS.recording,
-    letterSpacing: 0.5,
-  },
-  durationTimer: {
-    fontSize: 52,
-    fontWeight: '900',
-    color: COLORS.text,
-    letterSpacing: 2,
-    fontVariant: ['tabular-nums'],
-    marginBottom: 24,
-  },
-  waveformSection: {
-    width: '100%',
-    alignItems: 'center',
-    marginBottom: 28,
-  },
-  waveformContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    height: WAVEFORM_MAX_HEIGHT + 8,
-  },
-  waveformBar: {
-    // width / borderRadius set inline per bar
-  },
-  recordingTip: {
-    fontSize: 13,
-    color: COLORS.muted,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 32,
-    paddingHorizontal: 16,
-  },
-  stopButtonOuter: {
-    alignItems: 'center',
-  },
-  stopButton: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
-    backgroundColor: 'rgba(239,68,68,0.15)',
-    borderWidth: 2,
-    borderColor: COLORS.recording,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-    shadowColor: COLORS.recording,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  stopButtonSquare: {
-    width: 22,
-    height: 22,
-    borderRadius: 4,
-    backgroundColor: COLORS.recording,
-  },
-  stopButtonLabel: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.recording,
-  },
-
-  // ── Phase 3: Review ────────────────────────────────────────────────────────
-  reviewScrollContent: {
-    flexGrow: 1,
-    paddingTop: 8,
-    paddingBottom: 24,
-  },
-  transcriptCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(123,94,167,0.22)',
-  },
-  transcriptHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  transcriptLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.muted,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-  },
-  editLink: {
-    fontSize: 13,
-    color: COLORS.accent,
-    fontWeight: '600',
-  },
-  doneEditLink: {
-    fontSize: 13,
-    color: COLORS.success,
-    fontWeight: '700',
-  },
-  transcribingState: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    gap: 10,
-  },
-  transcribingText: {
-    fontSize: 14,
-    color: COLORS.muted,
-    fontStyle: 'italic',
-  },
-  transcriptText: {
-    fontSize: 15,
-    color: COLORS.text,
-    lineHeight: 24,
-  },
-  transcriptInput: {
-    fontSize: 15,
-    color: COLORS.text,
-    lineHeight: 24,
-    minHeight: 100,
-    borderWidth: 1,
-    borderColor: COLORS.primary,
-    borderRadius: 10,
-    padding: 10,
-    backgroundColor: '#12122A',
-    textAlignVertical: 'top',
-  },
-
-  // Analysis card
-  analysisCard: {
-    backgroundColor: COLORS.card,
-    borderRadius: 18,
-    padding: 18,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(192,132,252,0.22)',
-  },
-  analysisLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: COLORS.muted,
-    letterSpacing: 1.2,
-    textTransform: 'uppercase',
-    marginBottom: 14,
-  },
-  analyzingState: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 10,
-  },
-  analyzingText: {
-    fontSize: 14,
-    color: COLORS.muted,
-    fontStyle: 'italic',
-  },
-  analysisContent: {
-    gap: 10,
-  },
-  vividnessRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  vividnessLabel: {
-    fontSize: 13,
-    color: COLORS.muted,
-    fontWeight: '600',
-  },
-  vividnessScore: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: COLORS.text,
-  },
-  vividnessMax: {
-    fontSize: 13,
+  phaseLabel: {
+    fontSize:   15,
     fontWeight: '500',
-    color: COLORS.muted,
+    color:      COLORS.ink2,
+    textAlign:  'center',
   },
-  vividnessTrack: {
-    height: 8,
-    backgroundColor: 'rgba(139,139,174,0.18)',
-    borderRadius: 4,
-    overflow: 'hidden',
-    marginTop: 2,
-    marginBottom: 4,
-  },
-  vividnessFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  analysisSummary: {
-    fontSize: 14,
-    color: COLORS.muted,
-    lineHeight: 21,
-    fontStyle: 'italic',
-    borderLeftWidth: 2,
-    borderLeftColor: COLORS.accent,
-    paddingLeft: 10,
-    marginTop: 4,
-  },
-  tagRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-    marginTop: 6,
-  },
-  emotionChip: {
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
-    borderWidth: 1,
-  },
-  emotionChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-  },
-  symbolTag: {
-    borderRadius: 20,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    backgroundColor: 'rgba(139,139,174,0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(139,139,174,0.25)',
-  },
-  symbolTagText: {
-    fontSize: 12,
-    color: COLORS.muted,
-    fontWeight: '500',
+  headerSpacer: {
+    width: 36,
   },
 
-  // Error
-  errorCard: {
-    backgroundColor: 'rgba(239,68,68,0.10)',
-    borderRadius: 12,
-    padding: 14,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(239,68,68,0.28)',
+  // ── Phase area ───────────────────────────────────────────────────────────────
+  phaseArea: {
+    flex:              1,
+    paddingTop:        120, // clear the absolute header
+    paddingBottom:     180, // clear the hold button
+  },
+
+  // ── Hold button ──────────────────────────────────────────────────────────────
+  holdWrap: {
+    position:        'absolute',
+    bottom:          70,
+    left:            0,
+    right:           0,
+    alignItems:      'center',
+  },
+
+  // ── Error banner ─────────────────────────────────────────────────────────────
+  errorBanner: {
+    position:          'absolute',
+    bottom:            180,
+    left:              20,
+    right:             20,
+    backgroundColor:   '#fde8dc',
+    borderRadius:      12,
+    padding:           12,
+    borderWidth:       1,
+    borderColor:       COLORS.peach,
   },
   errorText: {
-    fontSize: 13,
-    color: COLORS.error,
-    lineHeight: 20,
-  },
-
-  // Review actions
-  reviewActions: {
-    gap: 12,
-    marginTop: 4,
-  },
-  saveButtonOuter: {
-    borderRadius: 16,
-    overflow: 'hidden',
-    shadowColor: COLORS.success,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  saveButtonGradient: {
-    paddingVertical: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  saveButtonText: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 0.4,
-  },
-  reRecordButton: {
-    paddingVertical: 14,
-    alignItems: 'center',
-    borderRadius: 14,
-    borderWidth: 1.5,
-    borderColor: 'rgba(139,139,174,0.35)',
-  },
-  reRecordButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: COLORS.muted,
-  },
-
-  // ── Phase 4: Saving ────────────────────────────────────────────────────────
-  savingContainer: {
-    alignItems: 'center',
-    gap: 14,
-  },
-  savingText: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  savingSubtext: {
-    fontSize: 14,
-    color: COLORS.muted,
-  },
-
-  // ── Phase 5: Success ───────────────────────────────────────────────────────
-  successContainer: {
-    alignItems: 'center',
-    gap: 14,
-  },
-  successCircle: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(16,185,129,0.50)',
-    shadowColor: COLORS.success,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.45,
-    shadowRadius: 20,
-    elevation: 12,
-  },
-  successCheck: {
-    fontSize: 44,
-    color: COLORS.success,
-    fontWeight: '900',
-  },
-  successTitle: {
-    fontSize: 26,
-    fontWeight: '800',
-    color: COLORS.text,
-    letterSpacing: 0.3,
-  },
-  successSubtitle: {
-    fontSize: 14,
-    color: COLORS.muted,
+    fontSize:  13,
+    color:     COLORS.ink2,
+    textAlign: 'center',
   },
 });

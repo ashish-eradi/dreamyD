@@ -57,6 +57,7 @@ const createAuthSlice = (set) => ({
   setIsLoading: (isLoading) => set({ isLoading }),
 
   setIsPremium: (isPremium) => set({ isPremium }),
+  setPremium: (isPremium) => set({ isPremium }),
 
   signOut: () =>
     set({

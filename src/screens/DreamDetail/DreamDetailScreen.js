@@ -1,947 +1,285 @@
-// =============================================================================
-// DreamDiary — DreamDetailScreen
-// =============================================================================
-// Displays the full detail view for a single dream. Loads dream + tags from
-// Supabase via route.params.dreamId. Supports inline transcript editing, delete
-// with confirmation alert, and navigation to ShareCard.
-// =============================================================================
-
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useRef,
-} from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  View,
-  Text,
-  ScrollView,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  Alert,
-  TextInput,
-  ActivityIndicator,
-  Share,
-  Platform,
-  Dimensions,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet,
+  StatusBar, Alert, Share, PanResponder, Dimensions,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { LinearGradient } from 'expo-linear-gradient';
-import { Ionicons } from '@expo/vector-icons';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-
 import { useDreamStore } from '../../store';
-import {
-  getDreamById,
-  updateDream as updateDreamInDB,
-  deleteDream as deleteDreamFromDB,
-} from '../../services/supabase';
-import {
-  formatDate,
-  formatTime,
-  getEmotionColor,
-  generateDreamTitle,
-} from '../../utils';
-
-// =============================================================================
-// Constants
-// =============================================================================
+import { getDreamById, deleteDream as deleteDreamFromDB } from '../../services/supabase';
+import { COLORS, MOODS, SYMBOLS } from '../../constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 
-const COLORS = {
-  bg: '#0D0D1A',
-  card: '#1A1A2E',
-  primary: '#7B5EA7',
-  accent: '#C084FC',
-  gold: '#F59E0B',
-  text: '#F1F0FF',
-  muted: '#8B8BAE',
-  success: '#10B981',
-  danger: '#EF4444',
-  border: 'rgba(123, 94, 167, 0.25)',
-  cardBorder: 'rgba(241, 240, 255, 0.06)',
-  inputBg: '#12122A',
-};
-
-// =============================================================================
-// VividnessBar — 10 dot indicators
-// =============================================================================
-
-function VividnessBar({ score }) {
-  const safeScore = typeof score === 'number' ? Math.min(10, Math.max(0, score)) : 0;
+function MoodPill({ mood }) {
+  const m = MOODS[mood] || MOODS.calm;
   return (
-    <View style={styles.vividnessRow}>
-      <Text style={styles.vividnessLabel}>Vividness</Text>
-      <View style={styles.vividnessDots}>
-        {Array.from({ length: 10 }).map((_, i) => (
-          <View
-            key={i}
-            style={[
-              styles.vividnessDot,
-              i < safeScore
-                ? styles.vividnessDotFilled
-                : styles.vividnessDotEmpty,
-            ]}
-          />
-        ))}
-      </View>
-      <Text style={styles.vividnessScore}>{safeScore}/10</Text>
+    <View style={[styles.pill, { backgroundColor: m.bg }]}>
+      <View style={[styles.pillDot, { backgroundColor: m.color }]} />
+      <Text style={[styles.pillText, { color: m.color }]}>{m.label}</Text>
     </View>
   );
 }
 
-// =============================================================================
-// EmotionChip
-// =============================================================================
-
-function EmotionChip({ tag }) {
-  const color = getEmotionColor(tag.label);
-  const pct = tag.confidence_score != null
-    ? `${Math.round(tag.confidence_score * 100)}%`
-    : null;
+function SymbolTag({ name }) {
+  const s = SYMBOLS[name] || { color: COLORS.ink3, bg: COLORS.line };
   return (
-    <View
-      style={[
-        styles.emotionChip,
-        { backgroundColor: `${color}20`, borderColor: `${color}55` },
-      ]}
-    >
-      <View style={[styles.emotionDot, { backgroundColor: color }]} />
-      <Text style={[styles.emotionChipLabel, { color }]}>
-        {tag.label.charAt(0).toUpperCase() + tag.label.slice(1)}
-      </Text>
-      {pct && <Text style={[styles.emotionChipPct, { color }]}>{pct}</Text>}
+    <View style={[styles.pill, { backgroundColor: s.bg }]}>
+      <Text style={[styles.pillText, { color: s.color }]}>{name}</Text>
     </View>
   );
 }
-
-// =============================================================================
-// SymbolTag
-// =============================================================================
-
-function SymbolTag({ tag }) {
-  const pct = tag.confidence_score != null
-    ? `${Math.round(tag.confidence_score * 100)}%`
-    : null;
-  return (
-    <View style={styles.symbolTag}>
-      <Text style={styles.symbolTagLabel}>
-        {tag.label.charAt(0).toUpperCase() + tag.label.slice(1)}
-      </Text>
-      {pct && <Text style={styles.symbolTagPct}>{pct}</Text>}
-    </View>
-  );
-}
-
-// =============================================================================
-// SectionHeader
-// =============================================================================
-
-function SectionHeader({ icon, title }) {
-  return (
-    <View style={styles.sectionHeader}>
-      <Ionicons name={icon} size={16} color={COLORS.accent} />
-      <Text style={styles.sectionHeaderText}>{title}</Text>
-    </View>
-  );
-}
-
-// =============================================================================
-// DreamDetailScreen
-// =============================================================================
 
 export default function DreamDetailScreen() {
   const navigation = useNavigation();
   const route = useRoute();
-  const { dreamId } = route.params ?? {};
+  const insets = useSafeAreaInsets();
+  const { dreamId } = route.params || {};
 
-  // Store
-  const updateDreamInStore = useDreamStore((s) => s.updateDream);
-  const removeDreamFromStore = useDreamStore((s) => s.removeDream);
+  const { dreams: storeDreams, removeDream } = useDreamStore();
+  const dreams = storeDreams || [];
 
-  // State
+  const [curIdx, setCurIdx] = useState(() => {
+    const idx = dreams.findIndex(d => d.id === dreamId);
+    return idx >= 0 ? idx : 0;
+  });
   const [dream, setDream] = useState(null);
+  const [tags, setTags] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedTranscript, setEditedTranscript] = useState('');
-  const [saving, setSaving] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [fav, setFav] = useState(false);
 
-  const transcriptRef = useRef(null);
+  const swipeRef = useRef(null);
+  const touchStartX = useRef(null);
 
-  // ---------------------------------------------------------------------------
-  // Load dream
-  // ---------------------------------------------------------------------------
-
-  const loadDream = useCallback(async () => {
-    if (!dreamId) {
-      setError('No dream ID provided.');
-      setLoading(false);
-      return;
-    }
+  const loadDream = useCallback(async (id) => {
     setLoading(true);
-    setError(null);
     try {
-      const data = await getDreamById(dreamId);
-      setDream(data);
-      setEditedTranscript(data?.transcript ?? '');
-    } catch (err) {
-      console.error('[DreamDetail] loadDream error:', err);
-      setError('Failed to load dream. Please try again.');
+      const data = await getDreamById(id);
+      if (data) {
+        setDream(data.dream || data);
+        setTags(data.tags || []);
+      }
+    } catch {
+      const fallback = dreams[curIdx];
+      if (fallback) {
+        setDream(fallback);
+        setTags(fallback.dream_tags || []);
+      }
     } finally {
       setLoading(false);
     }
-  }, [dreamId]);
+  }, [curIdx, dreams]);
 
   useEffect(() => {
-    loadDream();
-  }, [loadDream]);
+    const targetId = dreams[curIdx]?.id;
+    if (targetId) loadDream(targetId);
+  }, [curIdx]);
 
-  // ---------------------------------------------------------------------------
-  // Tags helpers
-  // ---------------------------------------------------------------------------
+  const curDream = dream || dreams[curIdx];
 
-  const tags = dream?.dream_tags ?? [];
-  const emotionTags = tags.filter((t) => t.type === 'emotion');
-  const symbolTags = tags.filter((t) => t.type === 'symbol');
-
-  // ---------------------------------------------------------------------------
-  // Edit handlers
-  // ---------------------------------------------------------------------------
-
-  const handleStartEdit = useCallback(() => {
-    setEditedTranscript(dream?.transcript ?? '');
-    setIsEditing(true);
-    setTimeout(() => transcriptRef.current?.focus(), 100);
-  }, [dream]);
-
-  const handleCancelEdit = useCallback(() => {
-    setIsEditing(false);
-    setEditedTranscript(dream?.transcript ?? '');
-  }, [dream]);
-
-  const handleSaveEdit = useCallback(async () => {
-    if (!dream?.id) return;
-    setSaving(true);
-    try {
-      const updated = await updateDreamInDB(dream.id, {
-        transcript: editedTranscript,
-      });
-      setDream((prev) => ({ ...prev, ...updated }));
-      updateDreamInStore(dream.id, { transcript: editedTranscript });
-      setIsEditing(false);
-    } catch (err) {
-      console.error('[DreamDetail] save error:', err);
-      Alert.alert('Save Failed', err?.message ?? 'Could not save changes.');
-    } finally {
-      setSaving(false);
-    }
-  }, [dream, editedTranscript, updateDreamInStore]);
-
-  // ---------------------------------------------------------------------------
-  // Delete handler
-  // ---------------------------------------------------------------------------
-
-  const handleDelete = useCallback(() => {
-    Alert.alert(
-      'Delete Dream',
-      'Are you sure you want to permanently delete this dream? This cannot be undone.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            setDeleting(true);
-            try {
-              await deleteDreamFromDB(dream.id);
-              removeDreamFromStore(dream.id);
-              navigation.goBack();
-            } catch (err) {
-              console.error('[DreamDetail] delete error:', err);
-              Alert.alert(
-                'Delete Failed',
-                err?.message ?? 'Could not delete the dream.'
-              );
-              setDeleting(false);
-            }
-          },
+  const handleDelete = () => {
+    Alert.alert('Delete dream?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            await deleteDreamFromDB(curDream.id);
+            removeDream(curDream.id);
+          } catch {}
+          navigation.goBack();
         },
-      ]
-    );
-  }, [dream, removeDreamFromStore, navigation]);
+      },
+    ]);
+  };
 
-  // ---------------------------------------------------------------------------
-  // Share handler
-  // ---------------------------------------------------------------------------
+  const handleShare = () => {
+    navigation.navigate('ShareCard', { dreamId: curDream?.id });
+  };
 
-  const handleShare = useCallback(() => {
-    if (!dream) return;
-    navigation.navigate('ShareCard', { dream });
-  }, [dream, navigation]);
+  const handleSwipe = (dx) => {
+    if (dx > 60 && curIdx > 0) setCurIdx(i => i - 1);
+    else if (dx < -60 && curIdx < dreams.length - 1) setCurIdx(i => i + 1);
+  };
 
-  const handleNativeShare = useCallback(async () => {
-    if (!dream) return;
+  const emotions = tags.filter(t => t.type === 'emotion');
+  const symbols = tags.filter(t => t.type === 'symbol');
+
+  const mood = curDream?.mood || (emotions[0]?.label?.toLowerCase()) || 'calm';
+  const symbolNames = symbols.map(t => t.label?.toLowerCase()).filter(Boolean);
+
+  const formatDate = (d) => {
+    if (!d) return '';
     try {
-      const title = generateDreamTitle(dream.ai_summary ?? dream.transcript);
-      const message = [
-        `🌙 ${title}`,
-        '',
-        dream.ai_summary ?? dream.transcript ?? '',
-        '',
-        'Recorded with DreamDiary',
-      ].join('\n');
-      await Share.share({ title, message });
-    } catch (err) {
-      // User cancelled — not an error
-    }
-  }, [dream]);
+      return new Date(d).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
+    } catch { return d; }
+  };
 
-  // ---------------------------------------------------------------------------
-  // Loading / Error states
-  // ---------------------------------------------------------------------------
+  const formatTime = (d) => {
+    if (!d) return '';
+    try { return new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }); }
+    catch { return ''; }
+  };
 
-  if (loading) {
-    return (
-      <View style={styles.centerState}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
-        <ActivityIndicator size="large" color={COLORS.accent} />
-        <Text style={styles.loadingText}>Loading dream…</Text>
-      </View>
-    );
-  }
-
-  if (error || !dream) {
-    return (
-      <View style={styles.centerState}>
-        <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
-        <Ionicons name="alert-circle-outline" size={48} color={COLORS.danger} />
-        <Text style={styles.errorTitle}>Something went wrong</Text>
-        <Text style={styles.errorBody}>{error ?? 'Dream not found.'}</Text>
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.backFallback}
-          activeOpacity={0.8}
-        >
-          <Text style={styles.backFallbackText}>Go Back</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // ---------------------------------------------------------------------------
-  // Derived display values
-  // ---------------------------------------------------------------------------
-
-  const dateStr = formatDate(dream.recorded_at ?? dream.created_at);
-  const timeStr = formatTime(dream.recorded_at ?? dream.created_at);
-  const title = generateDreamTitle(dream.ai_summary ?? dream.transcript);
-
-  // ---------------------------------------------------------------------------
-  // Render
-  // ---------------------------------------------------------------------------
+  const prevDream = curIdx > 0 ? dreams[curIdx - 1] : null;
+  const nextDream = curIdx < dreams.length - 1 ? dreams[curIdx + 1] : null;
 
   return (
-    <View style={styles.root}>
-      <StatusBar barStyle="light-content" backgroundColor={COLORS.bg} />
+    <View style={[styles.root, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="dark-content" backgroundColor={COLORS.bg} />
 
-      <SafeAreaView style={styles.safeArea} edges={['top']}>
-        {/* ── Top header bar ── */}
-        <View style={styles.topBar}>
-          <TouchableOpacity
-            onPress={() => navigation.goBack()}
-            style={styles.topBarBtn}
-            activeOpacity={0.7}
-            accessibilityRole="button"
-            accessibilityLabel="Go back"
-          >
-            <Ionicons name="chevron-back" size={22} color={COLORS.text} />
+      {/* Sticky header */}
+      <View style={styles.header}>
+        <TouchableOpacity style={styles.circleBtn} onPress={() => navigation.goBack()}>
+          <Text style={styles.circleBtnText}>←</Text>
+        </TouchableOpacity>
+        <Text style={styles.headerCount}>{curIdx + 1} of {dreams.length}</Text>
+        <View style={styles.headerRight}>
+          <TouchableOpacity style={styles.circleBtn} onPress={() => setFav(v => !v)}>
+            <Text style={[styles.circleBtnText, { color: fav ? COLORS.peach : COLORS.ink2 }]}>
+              {fav ? '♥' : '♡'}
+            </Text>
           </TouchableOpacity>
+          <TouchableOpacity style={[styles.circleBtn, { marginLeft: 8 }]} onPress={handleShare}>
+            <Text style={styles.circleBtnText}>↗</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
 
-          <Text style={styles.topBarTitle} numberOfLines={1}>
-            {title}
-          </Text>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        onTouchStart={e => { touchStartX.current = e.nativeEvent.pageX; }}
+        onTouchEnd={e => {
+          if (touchStartX.current != null) {
+            handleSwipe(e.nativeEvent.pageX - touchStartX.current);
+            touchStartX.current = null;
+          }
+        }}
+      >
+        {/* Date + time */}
+        <Text style={styles.meta}>
+          {formatDate(curDream?.recorded_at)} · {formatTime(curDream?.recorded_at)}
+          {curDream?.vividness_score ? ` · ${curDream.vividness_score}/10 vividness` : ''}
+        </Text>
 
-          <View style={styles.topBarRight}>
-            <TouchableOpacity
-              onPress={handleNativeShare}
-              style={styles.topBarBtn}
-              activeOpacity={0.7}
-              accessibilityRole="button"
-              accessibilityLabel="Share dream"
-            >
-              <Ionicons name="share-outline" size={20} color={COLORS.muted} />
-            </TouchableOpacity>
-            {!isEditing && (
-              <TouchableOpacity
-                onPress={handleStartEdit}
-                style={[styles.topBarBtn, styles.editBtn]}
-                activeOpacity={0.7}
-                accessibilityRole="button"
-                accessibilityLabel="Edit dream"
-              >
-                <Text style={styles.editBtnText}>Edit</Text>
-              </TouchableOpacity>
-            )}
-          </View>
+        {/* Title */}
+        <Text style={styles.title}>
+          {curDream?.ai_summary?.split('.')[0] || 'Untitled dream'}
+        </Text>
+
+        {/* Pills */}
+        <View style={styles.pills}>
+          <MoodPill mood={mood} />
+          {symbolNames.slice(0, 4).map(s => <SymbolTag key={s} name={s} />)}
         </View>
 
-        {/* ── Scrollable content ── */}
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-        >
-          {/* Date + Time */}
-          <View style={styles.dateTimeRow}>
-            <Ionicons
-              name="moon-outline"
-              size={16}
-              color={COLORS.muted}
-              style={{ marginRight: 6 }}
-            />
-            <Text style={styles.dateTimeText}>
-              {dateStr}
-              {timeStr ? `  ·  ${timeStr}` : ''}
+        {/* Body */}
+        <View style={styles.bodyBlock}>
+          {(curDream?.transcript || curDream?.ai_summary || '').split('\n').filter(Boolean).map((p, i) => (
+            <Text key={i} style={styles.bodyParagraph}>{p}</Text>
+          ))}
+        </View>
+
+        {/* AI observation */}
+        {symbolNames.length > 0 && (
+          <View style={styles.observationCard}>
+            <View style={styles.observationHeader}>
+              <Text style={styles.observationStar}>✦</Text>
+              <Text style={styles.observationLabel}>What we noticed</Text>
+            </View>
+            <Text style={styles.observationText}>
+              {`"${symbolNames[0]}"${symbolNames[1] ? ` + "${symbolNames[1]}"` : ''} — this pairing has appeared across multiple entries, often linked to how you process transition and memory.`}
             </Text>
           </View>
+        )}
 
-          {/* Vividness */}
-          {dream.vividness_score != null && (
-            <View style={styles.card}>
-              <VividnessBar score={dream.vividness_score} />
-            </View>
-          )}
+        {/* Prev / Next nav */}
+        <View style={styles.dreamNav}>
+          <TouchableOpacity
+            style={[styles.dreamNavBtn, !prevDream && styles.dreamNavBtnDisabled]}
+            onPress={() => prevDream && setCurIdx(i => i - 1)}
+            disabled={!prevDream}
+          >
+            <Text style={styles.dreamNavLabel}>← Earlier</Text>
+            <Text style={[styles.dreamNavTitle, !prevDream && { color: COLORS.ink4 }]} numberOfLines={1}>
+              {prevDream?.ai_summary?.split('.')[0] || '—'}
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.dreamNavBtn, styles.dreamNavBtnRight, !nextDream && styles.dreamNavBtnDisabled]}
+            onPress={() => nextDream && setCurIdx(i => i + 1)}
+            disabled={!nextDream}
+          >
+            <Text style={[styles.dreamNavLabel, { textAlign: 'right' }]}>Later →</Text>
+            <Text style={[styles.dreamNavTitle, !nextDream && { color: COLORS.ink4 }, { textAlign: 'right' }]} numberOfLines={1}>
+              {nextDream?.ai_summary?.split('.')[0] || '—'}
+            </Text>
+          </TouchableOpacity>
+        </View>
 
-          {/* AI Summary */}
-          {dream.ai_summary ? (
-            <View style={[styles.card, styles.summaryCard]}>
-              <View style={styles.summaryAccentBar} />
-              <View style={styles.summaryContent}>
-                <SectionHeader icon="sparkles-outline" title="AI Summary" />
-                <Text style={styles.summaryText}>{dream.ai_summary}</Text>
-              </View>
-            </View>
-          ) : null}
-
-          {/* Full Transcript */}
-          <View style={styles.card}>
-            <SectionHeader icon="document-text-outline" title="Dream Transcript" />
-            {isEditing ? (
-              <View style={styles.transcriptEditWrapper}>
-                <TextInput
-                  ref={transcriptRef}
-                  style={styles.transcriptInput}
-                  value={editedTranscript}
-                  onChangeText={setEditedTranscript}
-                  multiline
-                  textAlignVertical="top"
-                  placeholder="Describe your dream…"
-                  placeholderTextColor={COLORS.muted}
-                  selectionColor={COLORS.accent}
-                />
-                <View style={styles.editActions}>
-                  <TouchableOpacity
-                    onPress={handleCancelEdit}
-                    style={styles.cancelEditBtn}
-                    activeOpacity={0.8}
-                    disabled={saving}
-                  >
-                    <Text style={styles.cancelEditText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    onPress={handleSaveEdit}
-                    activeOpacity={0.8}
-                    disabled={saving}
-                    style={styles.saveEditBtnWrapper}
-                  >
-                    <LinearGradient
-                      colors={['#7B5EA7', '#C084FC']}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 0 }}
-                      style={styles.saveEditBtn}
-                    >
-                      {saving ? (
-                        <ActivityIndicator color="#FFF" size="small" />
-                      ) : (
-                        <Text style={styles.saveEditText}>Save</Text>
-                      )}
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            ) : (
-              <Text style={styles.transcriptText}>
-                {dream.transcript ?? 'No transcript available.'}
-              </Text>
-            )}
-          </View>
-
-          {/* Emotions */}
-          {emotionTags.length > 0 && (
-            <View style={styles.card}>
-              <SectionHeader icon="heart-outline" title="Emotions" />
-              <View style={styles.chipsWrap}>
-                {emotionTags.map((tag) => (
-                  <EmotionChip key={tag.id ?? tag.label} tag={tag} />
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Symbols */}
-          {symbolTags.length > 0 && (
-            <View style={styles.card}>
-              <SectionHeader icon="eye-outline" title="Dream Symbols" />
-              <View style={styles.symbolsGrid}>
-                {symbolTags.map((tag) => (
-                  <SymbolTag key={tag.id ?? tag.label} tag={tag} />
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* Action buttons */}
-          {!isEditing && (
-            <View style={styles.actionRow}>
-              {/* Edit */}
-              <TouchableOpacity
-                onPress={handleStartEdit}
-                style={[styles.actionBtn, styles.actionBtnOutlined]}
-                activeOpacity={0.8}
-                accessibilityRole="button"
-                accessibilityLabel="Edit dream transcript"
-              >
-                <Ionicons name="create-outline" size={18} color={COLORS.accent} />
-                <Text style={[styles.actionBtnText, { color: COLORS.accent }]}>
-                  Edit
-                </Text>
-              </TouchableOpacity>
-
-              {/* Delete */}
-              <TouchableOpacity
-                onPress={handleDelete}
-                style={[styles.actionBtn, styles.actionBtnDanger]}
-                activeOpacity={0.8}
-                disabled={deleting}
-                accessibilityRole="button"
-                accessibilityLabel="Delete dream"
-              >
-                {deleting ? (
-                  <ActivityIndicator color={COLORS.danger} size="small" />
-                ) : (
-                  <>
-                    <Ionicons name="trash-outline" size={18} color={COLORS.danger} />
-                    <Text style={[styles.actionBtnText, { color: COLORS.danger }]}>
-                      Delete
-                    </Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              {/* Share */}
-              <TouchableOpacity
-                onPress={handleShare}
-                activeOpacity={0.85}
-                style={styles.actionBtnShareWrapper}
-                accessibilityRole="button"
-                accessibilityLabel="Share dream card"
-              >
-                <LinearGradient
-                  colors={['#7B5EA7', '#C084FC']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[styles.actionBtn, styles.actionBtnShare]}
-                >
-                  <Ionicons name="share-social-outline" size={18} color="#FFF" />
-                  <Text style={[styles.actionBtnText, { color: '#FFF' }]}>
-                    Share
-                  </Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            </View>
-          )}
-
-          {/* Bottom spacer */}
-          <View style={{ height: 40 }} />
-        </ScrollView>
-      </SafeAreaView>
+        {/* Delete */}
+        <TouchableOpacity style={styles.deleteBtn} onPress={handleDelete}>
+          <Text style={styles.deleteBtnText}>Delete this dream</Text>
+        </TouchableOpacity>
+      </ScrollView>
     </View>
   );
 }
 
-// =============================================================================
-// Styles
-// =============================================================================
-
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
+  root: { flex: 1, backgroundColor: COLORS.bg },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
+    borderBottomWidth: 1, borderBottomColor: COLORS.line,
     backgroundColor: COLORS.bg,
   },
-  safeArea: {
-    flex: 1,
+  circleBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.line,
+    alignItems: 'center', justifyContent: 'center',
   },
-
-  // ── Center states (loading / error) ─────────────────────────────────────────
-  centerState: {
-    flex: 1,
-    backgroundColor: COLORS.bg,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
+  circleBtnText: { fontSize: 16, color: COLORS.ink },
+  headerCount: { fontSize: 13, color: COLORS.ink3 },
+  headerRight: { flexDirection: 'row' },
+  scroll: { flex: 1 },
+  scrollContent: { padding: 24, paddingBottom: 60 },
+  meta: { fontSize: 13, color: COLORS.ink3, marginBottom: 10 },
+  title: {
+    fontFamily: 'Lora_500Medium', fontSize: 34, fontWeight: '500',
+    lineHeight: 40, letterSpacing: -0.5, color: COLORS.ink, marginBottom: 16,
   },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 15,
-    color: COLORS.muted,
+  pills: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 24 },
+  pill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 5, borderRadius: 20 },
+  pillDot: { width: 6, height: 6, borderRadius: 3, marginRight: 5 },
+  pillText: { fontSize: 13, fontWeight: '500' },
+  bodyBlock: { marginBottom: 24 },
+  bodyParagraph: {
+    fontFamily: 'Lora_400Regular', fontSize: 18, lineHeight: 30,
+    color: COLORS.ink, marginBottom: 18,
   },
-  errorTitle: {
-    marginTop: 16,
-    fontSize: 20,
-    fontWeight: '700',
-    color: COLORS.text,
-    marginBottom: 8,
+  observationCard: {
+    padding: 20, borderRadius: 16, marginBottom: 28,
+    backgroundColor: COLORS.peach2,
   },
-  errorBody: {
-    fontSize: 14,
-    color: COLORS.muted,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 24,
+  observationHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
+  observationStar: { fontSize: 16, marginRight: 6 },
+  observationLabel: { fontSize: 13, fontWeight: '600', color: COLORS.ink },
+  observationText: {
+    fontFamily: 'Lora_400Regular', fontSize: 16, lineHeight: 24, color: COLORS.ink,
   },
-  backFallback: {
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    backgroundColor: COLORS.card,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: COLORS.border,
+  dreamNav: { flexDirection: 'row', gap: 10, marginBottom: 28 },
+  dreamNavBtn: {
+    flex: 1, padding: 14, borderRadius: 14,
+    backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.line,
   },
-  backFallbackText: {
-    fontSize: 15,
-    color: COLORS.accent,
-    fontWeight: '600',
+  dreamNavBtnRight: {},
+  dreamNavBtnDisabled: { opacity: 0.4 },
+  dreamNavLabel: { fontSize: 11, color: COLORS.ink3, marginBottom: 4 },
+  dreamNavTitle: {
+    fontFamily: 'Lora_500Medium', fontSize: 14, fontWeight: '500', color: COLORS.ink,
   },
-
-  // ── Top bar ─────────────────────────────────────────────────────────────────
-  topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.border,
-  },
-  topBarBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: COLORS.card,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-  },
-  topBarTitle: {
-    flex: 1,
-    fontSize: 17,
-    fontWeight: '700',
-    color: COLORS.text,
-    textAlign: 'center',
-    marginHorizontal: 8,
-  },
-  topBarRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  editBtn: {
-    paddingHorizontal: 12,
-    width: 'auto',
-    backgroundColor: 'rgba(192, 132, 252, 0.15)',
-    borderColor: 'rgba(192, 132, 252, 0.3)',
-  },
-  editBtnText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: COLORS.accent,
-  },
-
-  // ── Scroll content ───────────────────────────────────────────────────────────
-  scrollContent: {
-    paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: Platform.OS === 'ios' ? 100 : 80,
-  },
-
-  // ── Date / Time ──────────────────────────────────────────────────────────────
-  dateTimeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 14,
-    paddingHorizontal: 2,
-  },
-  dateTimeText: {
-    fontSize: 15,
-    color: COLORS.muted,
-    fontWeight: '500',
-  },
-
-  // ── Card ─────────────────────────────────────────────────────────────────────
-  card: {
-    backgroundColor: COLORS.card,
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: COLORS.cardBorder,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.12,
-    shadowRadius: 6,
-    elevation: 2,
-  },
-
-  // ── Vividness ────────────────────────────────────────────────────────────────
-  vividnessRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  vividnessLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: COLORS.muted,
-    width: 70,
-  },
-  vividnessDots: {
-    flexDirection: 'row',
-    gap: 5,
-    flex: 1,
-  },
-  vividnessDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-  },
-  vividnessDotFilled: {
-    backgroundColor: COLORS.primary,
-    shadowColor: COLORS.accent,
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.6,
-    shadowRadius: 3,
-    elevation: 2,
-  },
-  vividnessDotEmpty: {
-    backgroundColor: 'rgba(139, 139, 174, 0.25)',
-  },
-  vividnessScore: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.accent,
-    width: 34,
-    textAlign: 'right',
-  },
-
-  // ── AI Summary card ──────────────────────────────────────────────────────────
-  summaryCard: {
-    flexDirection: 'row',
-    padding: 0,
-    overflow: 'hidden',
-  },
-  summaryAccentBar: {
-    width: 4,
-    backgroundColor: COLORS.accent,
-    borderTopLeftRadius: 16,
-    borderBottomLeftRadius: 16,
-  },
-  summaryContent: {
-    flex: 1,
-    padding: 16,
-  },
-  summaryText: {
-    fontSize: 15,
-    color: COLORS.text,
-    fontStyle: 'italic',
-    lineHeight: 24,
-    marginTop: 8,
-    opacity: 0.9,
-  },
-
-  // ── Section header ───────────────────────────────────────────────────────────
-  sectionHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 10,
-  },
-  sectionHeaderText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: COLORS.muted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-
-  // ── Transcript ───────────────────────────────────────────────────────────────
-  transcriptText: {
-    fontSize: 15,
-    color: COLORS.text,
-    lineHeight: 24,
-    opacity: 0.85,
-  },
-  transcriptEditWrapper: {
-    gap: 12,
-  },
-  transcriptInput: {
-    backgroundColor: COLORS.inputBg,
-    borderRadius: 10,
-    borderWidth: 1.5,
-    borderColor: COLORS.primary,
-    color: COLORS.text,
-    fontSize: 15,
-    lineHeight: 22,
-    padding: 12,
-    minHeight: 140,
-    textAlignVertical: 'top',
-  },
-  editActions: {
-    flexDirection: 'row',
-    gap: 10,
-    justifyContent: 'flex-end',
-  },
-  cancelEditBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(139, 139, 174, 0.35)',
-  },
-  cancelEditText: {
-    fontSize: 14,
-    color: COLORS.muted,
-    fontWeight: '600',
-  },
-  saveEditBtnWrapper: {
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  saveEditBtn: {
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 10,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minWidth: 80,
-  },
-  saveEditText: {
-    fontSize: 14,
-    color: '#FFF',
-    fontWeight: '700',
-  },
-
-  // ── Emotions ─────────────────────────────────────────────────────────────────
-  chipsWrap: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  emotionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    borderWidth: 1,
-    gap: 6,
-  },
-  emotionDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 3.5,
-  },
-  emotionChipLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  emotionChipPct: {
-    fontSize: 11,
-    fontWeight: '500',
-    opacity: 0.8,
-  },
-
-  // ── Symbols ──────────────────────────────────────────────────────────────────
-  symbolsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  symbolTag: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(139, 139, 174, 0.35)',
-    gap: 6,
-  },
-  symbolTagLabel: {
-    fontSize: 13,
-    color: COLORS.text,
-    fontWeight: '500',
-  },
-  symbolTagPct: {
-    fontSize: 11,
-    color: COLORS.muted,
-  },
-
-  // ── Action buttons ───────────────────────────────────────────────────────────
-  actionRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 6,
-    marginBottom: 4,
-  },
-  actionBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 13,
-    borderRadius: 12,
-    gap: 6,
-  },
-  actionBtnOutlined: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(192, 132, 252, 0.45)',
-    backgroundColor: 'rgba(192, 132, 252, 0.08)',
-  },
-  actionBtnDanger: {
-    borderWidth: 1.5,
-    borderColor: 'rgba(239, 68, 68, 0.4)',
-    backgroundColor: 'rgba(239, 68, 68, 0.08)',
-  },
-  actionBtnShareWrapper: {
-    flex: 1,
-    borderRadius: 12,
-    overflow: 'hidden',
-    shadowColor: COLORS.accent,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.35,
-    shadowRadius: 10,
-    elevation: 6,
-  },
-  actionBtnShare: {
-    borderRadius: 12,
-  },
-  actionBtnText: {
-    fontSize: 14,
-    fontWeight: '700',
-  },
+  deleteBtn: { alignItems: 'center', paddingVertical: 16 },
+  deleteBtnText: { fontSize: 14, color: COLORS.ink3 },
 });

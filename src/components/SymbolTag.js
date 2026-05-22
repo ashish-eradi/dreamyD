@@ -1,82 +1,53 @@
 // =============================================================================
-// DreamDiary — SymbolTag component
+// DreamDiary V3 — SymbolTag component
 // =============================================================================
-// An outlined pill that displays a symbol label with an optional confidence dot.
+// A pastel pill displaying a dream symbol label in the V3 warm-paper style.
 //
 // Props:
-//   symbol     {string}        — symbol label (e.g. "ocean", "mirror")
-//   confidence {number}        — 0–1 confidence score (optional)
-//   onPress    {function}      — tap handler (optional)
+//   name     {string}    — symbol key (e.g. 'water', 'forest', 'flying')
+//   onPress  {function}  — optional tap handler
 // =============================================================================
 
 import React from 'react';
 import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
-
-// =============================================================================
-// Color constants
-// =============================================================================
-
-const ACCENT = '#C084FC';
-const TEXT   = '#F1F0FF';
-const MUTED  = '#8B8BAE';
-
-// =============================================================================
-// Confidence → dot color helper
-// =============================================================================
-
-function confidenceColor(confidence) {
-  if (typeof confidence !== 'number') return MUTED;
-  if (confidence >= 0.75) return '#10B981'; // high   — green
-  if (confidence >= 0.45) return '#F59E0B'; // medium — gold
-  return '#8B8BAE';                         // low    — muted
-}
+import { getSymbolStyle } from '../constants/theme';
 
 // =============================================================================
 // Component
 // =============================================================================
 
-export default function SymbolTag({ symbol, confidence, onPress }) {
-  if (!symbol) return null;
+export default function SymbolTag({ name, onPress }) {
+  if (!name) return null;
 
-  const label =
-    symbol.charAt(0).toUpperCase() + symbol.slice(1).toLowerCase();
+  const style = getSymbolStyle(name);
+  const label = name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
 
-  const showDot =
-    typeof confidence === 'number' && confidence >= 0 && confidence <= 1;
-
-  const content = (
-    <View style={styles.inner}>
-      {showDot && (
-        <View
-          style={[
-            styles.dot,
-            { backgroundColor: confidenceColor(confidence) },
-          ]}
-        />
-      )}
-      <Text style={styles.label} numberOfLines={1}>
-        {label}
-      </Text>
-    </View>
+  const inner = (
+    <Text style={[styles.label, { color: style.color }]} numberOfLines={1}>
+      {label}
+    </Text>
   );
 
   if (onPress) {
     return (
       <TouchableOpacity
         onPress={onPress}
-        activeOpacity={0.7}
-        style={styles.chip}
+        activeOpacity={0.72}
+        style={[styles.chip, { backgroundColor: style.bg }]}
         accessibilityRole="button"
         accessibilityLabel={`Symbol: ${label}`}
       >
-        {content}
+        {inner}
       </TouchableOpacity>
     );
   }
 
   return (
-    <View style={styles.chip} accessibilityLabel={`Symbol: ${label}`}>
-      {content}
+    <View
+      style={[styles.chip, { backgroundColor: style.bg }]}
+      accessibilityLabel={`Symbol: ${label}`}
+    >
+      {inner}
     </View>
   );
 }
@@ -87,27 +58,13 @@ export default function SymbolTag({ symbol, confidence, onPress }) {
 
 const styles = StyleSheet.create({
   chip: {
-    borderWidth:       1,
-    borderColor:       `${ACCENT}70`,
-    borderRadius:      10,
-    paddingHorizontal: 9,
+    borderRadius:      20,
+    paddingHorizontal: 10,
     paddingVertical:   4,
     alignSelf:         'flex-start',
   },
-  inner: {
-    flexDirection: 'row',
-    alignItems:    'center',
-    gap:           5,
-  },
-  dot: {
-    width:        5,
-    height:       5,
-    borderRadius: 2.5,
-  },
   label: {
-    fontSize:      12,
-    color:         TEXT,
-    fontWeight:    '500',
-    letterSpacing: 0.1,
+    fontSize:   13,
+    fontWeight: '500',
   },
 });
