@@ -208,13 +208,8 @@ function OnboardingNavigator() {
 // ─── Root stack (tabs + modals) ───────────────────────────────────────────────
 function RootNavigator() {
   const user = useStore((s) => s.user);
-  const onboardingDone = user?.onboarding_done ?? false;
-  const isAuthenticated = !!user;
 
-  // Show onboarding if not authenticated or onboarding not complete
-  const showOnboarding = !isAuthenticated || !onboardingDone;
-
-  if (showOnboarding) {
+  if (!user?.id) {
     return <OnboardingNavigator />;
   }
 

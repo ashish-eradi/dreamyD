@@ -18,10 +18,8 @@ import {
   ActivityIndicator,
   StatusBar,
 } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
-import { createStackNavigator } from '@react-navigation/stack';
-import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import MainNavigator from './src/navigation';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
@@ -37,8 +35,6 @@ import {
 // ── Zustand store ─────────────────────────────────────────────────────────────
 import {
   useDreamStore,
-  selectUser,
-  selectSession,
   selectIsLoading,
 } from './src/store';
 
@@ -56,150 +52,6 @@ const COLORS = {
   textMuted: '#8B8BAE',
   success: '#10B981',
 };
-
-// =============================================================================
-// Placeholder screens
-// =============================================================================
-// These are minimal stand-in components.  Replace each one with the real
-// screen implementation in src/screens/ as the project grows.
-
-function PlaceholderScreen({ route }) {
-  return (
-    <SafeAreaView style={styles.placeholderRoot}>
-      <View style={styles.placeholderCenter}>
-        <Text style={styles.placeholderTitle}>{route?.name ?? 'Screen'}</Text>
-        <Text style={styles.placeholderSubtitle}>Coming soon</Text>
-      </View>
-    </SafeAreaView>
-  );
-}
-
-// Onboarding screens
-const WelcomeScreen    = (props) => <PlaceholderScreen {...props} />;
-const SignInScreen     = (props) => <PlaceholderScreen {...props} />;
-const SignUpScreen     = (props) => <PlaceholderScreen {...props} />;
-
-// Main tab screens
-const HomeScreen       = (props) => <PlaceholderScreen {...props} />;
-const RecordDreamScreen = (props) => <PlaceholderScreen {...props} />;
-const DreamDetailScreen = (props) => <PlaceholderScreen {...props} />;
-const InsightsScreen   = (props) => <PlaceholderScreen {...props} />;
-const ProfileScreen    = (props) => <PlaceholderScreen {...props} />;
-
-// =============================================================================
-// Navigators
-// =============================================================================
-
-const Stack = createStackNavigator();
-const Tab   = createBottomTabNavigator();
-
-// ---------------------------------------------------------------------------
-// Onboarding stack
-// ---------------------------------------------------------------------------
-// Shown when there is no active session.
-
-function OnboardingNavigator() {
-  return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        cardStyle: { backgroundColor: COLORS.background },
-        animationEnabled: true,
-      }}
-    >
-      <Stack.Screen name="Welcome"  component={WelcomeScreen} />
-      <Stack.Screen name="SignIn"   component={SignInScreen}  />
-      <Stack.Screen name="SignUp"   component={SignUpScreen}  />
-    </Stack.Navigator>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Tab icon helper (text-only until vector icon library is wired up)
-// ---------------------------------------------------------------------------
-
-function TabIcon({ label, focused }) {
-  const icons = {
-    Home: '🌙',
-    Record: '⏺',
-    Insights: '✨',
-    Profile: '👤',
-  };
-  return (
-    <Text style={{ fontSize: focused ? 22 : 20, opacity: focused ? 1 : 0.55 }}>
-      {icons[label] ?? '●'}
-    </Text>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main tab navigator
-// ---------------------------------------------------------------------------
-// Shown when the user is authenticated.
-
-function MainNavigator() {
-  return (
-    <Tab.Navigator
-      screenOptions={({ route }) => ({
-        headerShown: false,
-        tabBarStyle: {
-          backgroundColor: COLORS.card,
-          borderTopColor: '#2A2A4A',
-          borderTopWidth: 1,
-          height: 60,
-          paddingBottom: 8,
-        },
-        tabBarActiveTintColor: COLORS.accent,
-        tabBarInactiveTintColor: COLORS.textMuted,
-        tabBarLabelStyle: {
-          fontSize: 10,
-          fontWeight: '600',
-          marginBottom: 2,
-        },
-        tabBarIcon: ({ focused }) => (
-          <TabIcon label={route.name} focused={focused} />
-        ),
-      })}
-    >
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        options={{ tabBarLabel: 'Dreams' }}
-      />
-      <Tab.Screen
-        name="Record"
-        component={RecordDreamScreen}
-        options={{ tabBarLabel: 'Record' }}
-      />
-      <Tab.Screen
-        name="Insights"
-        component={InsightsScreen}
-        options={{ tabBarLabel: 'Insights' }}
-      />
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ tabBarLabel: 'Profile' }}
-      />
-    </Tab.Navigator>
-  );
-}
-
-// We also need a root stack that wraps MainNavigator so we can push detail
-// screens (like DreamDetail) on top of the tabs without the tab bar showing.
-function RootNavigator() {
-  return (
-    <Stack.Navigator
-      screenOptions={{
-        headerShown: false,
-        cardStyle: { backgroundColor: COLORS.background },
-      }}
-    >
-      <Stack.Screen name="MainTabs"    component={MainNavigator}    />
-      <Stack.Screen name="DreamDetail" component={DreamDetailScreen} />
-    </Stack.Navigator>
-  );
-}
 
 // =============================================================================
 // Splash screen
@@ -221,35 +73,18 @@ function SplashScreen() {
 }
 
 // =============================================================================
-// Navigation theme
-// =============================================================================
-
-const navigationTheme = {
-  dark: true,
-  colors: {
-    primary: COLORS.primary,
-    background: COLORS.background,
-    card: COLORS.card,
-    text: COLORS.textPrimary,
-    border: '#2A2A4A',
-    notification: COLORS.accent,
-  },
-};
-
-// =============================================================================
 // App — root component
 // =============================================================================
 
 export default function App() {
-  // ── Store actions ───────────────────────────────────────────────────────────
+  // ── Store actions ─────────────────────────────────────────────────────────
   const setSession   = useDreamStore((s) => s.setSession);
   const setUser      = useDreamStore((s) => s.setUser);
   const setIsLoading = useDreamStore((s) => s.setIsLoading);
   const setIsPremium = useDreamStore((s) => s.setIsPremium);
   const storeSignOut = useDreamStore((s) => s.signOut);
 
-  // ── Store state ─────────────────────────────────────────────────────────────
-  const session   = useDreamStore(selectSession);
+  // ── Store state ───────────────────────────────────────────────────────────
   const isLoading = useDreamStore(selectIsLoading);
 
   // ── Handle deep links from notification taps ────────────────────────────────
@@ -383,9 +218,7 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar barStyle="light-content" backgroundColor={COLORS.background} />
-        <NavigationContainer theme={navigationTheme}>
-          {session ? <RootNavigator /> : <OnboardingNavigator />}
-        </NavigationContainer>
+        <MainNavigator />
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
@@ -417,25 +250,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
 
-  // ── Placeholder screens ──────────────────────────────────────────────────────
-  placeholderRoot: {
-    flex: 1,
-    backgroundColor: COLORS.background,
-  },
-  placeholderCenter: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  placeholderTitle: {
-    fontSize: 24,
-    fontWeight: '700',
-    color: COLORS.textPrimary,
-    marginBottom: 8,
-  },
-  placeholderSubtitle: {
-    fontSize: 14,
-    color: COLORS.textMuted,
-  },
 });

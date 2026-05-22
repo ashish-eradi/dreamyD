@@ -17,8 +17,8 @@ import { TouchableOpacity, View, Text, StyleSheet } from 'react-native';
 // =============================================================================
 
 const ACCENT = '#C084FC';
-const TEXT = '#F1F0FF';
-const MUTED = '#8B8BAE';
+const TEXT   = '#F1F0FF';
+const MUTED  = '#8B8BAE';
 
 // =============================================================================
 // Confidence → dot color helper
@@ -26,9 +26,9 @@ const MUTED = '#8B8BAE';
 
 function confidenceColor(confidence) {
   if (typeof confidence !== 'number') return MUTED;
-  if (confidence >= 0.75) return '#10B981'; // high — green
+  if (confidence >= 0.75) return '#10B981'; // high   — green
   if (confidence >= 0.45) return '#F59E0B'; // medium — gold
-  return '#8B8BAE'; // low — muted
+  return '#8B8BAE';                         // low    — muted
 }
 
 // =============================================================================
@@ -75,10 +75,7 @@ export default function SymbolTag({ symbol, confidence, onPress }) {
   }
 
   return (
-    <View
-      style={styles.chip}
-      accessibilityLabel={`Symbol: ${label}`}
-    >
+    <View style={styles.chip} accessibilityLabel={`Symbol: ${label}`}>
       {content}
     </View>
   );
@@ -90,27 +87,27 @@ export default function SymbolTag({ symbol, confidence, onPress }) {
 
 const styles = StyleSheet.create({
   chip: {
-    borderWidth: 1,
-    borderColor: `${ACCENT}70`,
-    borderRadius: 10,
+    borderWidth:       1,
+    borderColor:       `${ACCENT}70`,
+    borderRadius:      10,
     paddingHorizontal: 9,
-    paddingVertical: 4,
-    alignSelf: 'flex-start',
+    paddingVertical:   4,
+    alignSelf:         'flex-start',
   },
   inner: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
+    alignItems:    'center',
+    gap:           5,
   },
   dot: {
-    width: 5,
-    height: 5,
+    width:        5,
+    height:       5,
     borderRadius: 2.5,
   },
   label: {
-    fontSize: 12,
-    color: TEXT,
-    fontWeight: '500',
+    fontSize:      12,
+    color:         TEXT,
+    fontWeight:    '500',
     letterSpacing: 0.1,
   },
 });

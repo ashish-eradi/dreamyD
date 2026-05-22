@@ -21,7 +21,7 @@ export default function EmotionChip({ emotion, confidence, size = 'sm' }) {
   if (!emotion) return null;
 
   const color = getEmotionColor(emotion);
-  const isMd = size === 'md';
+  const isMd  = size === 'md';
 
   const label =
     emotion.charAt(0).toUpperCase() + emotion.slice(1).toLowerCase();
@@ -36,10 +36,13 @@ export default function EmotionChip({ emotion, confidence, size = 'sm' }) {
         isMd ? styles.chipMd : styles.chipSm,
         {
           backgroundColor: `${color}22`,
-          borderColor: `${color}55`,
+          borderColor:     `${color}55`,
         },
       ]}
-      accessibilityLabel={`Emotion: ${label}${showConfidence ? `, ${Math.round(confidence * 100)}% confidence` : ''}`}
+      accessibilityLabel={
+        `Emotion: ${label}` +
+        (showConfidence ? `, ${Math.round(confidence * 100)}% confidence` : '')
+      }
     >
       {/* Color dot */}
       <View
@@ -62,7 +65,7 @@ export default function EmotionChip({ emotion, confidence, size = 'sm' }) {
         {label}
       </Text>
 
-      {/* Confidence percentage */}
+      {/* Optional confidence percentage */}
       {showConfidence && (
         <Text
           style={[
@@ -84,23 +87,23 @@ export default function EmotionChip({ emotion, confidence, size = 'sm' }) {
 
 const styles = StyleSheet.create({
   chip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderRadius: 20,
-    alignSelf: 'flex-start',
+    flexDirection:  'row',
+    alignItems:     'center',
+    borderWidth:    1,
+    borderRadius:   20,
+    alignSelf:      'flex-start',
   },
 
   // ── Size variants ────────────────────────────────────────────────────────────
   chipSm: {
     paddingHorizontal: 9,
-    paddingVertical: 4,
-    gap: 5,
+    paddingVertical:   4,
+    gap:               5,
   },
   chipMd: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 6,
+    paddingVertical:   6,
+    gap:               6,
   },
 
   // ── Dot ─────────────────────────────────────────────────────────────────────
@@ -108,17 +111,17 @@ const styles = StyleSheet.create({
     borderRadius: 50,
   },
   dotSm: {
-    width: 6,
+    width:  6,
     height: 6,
   },
   dotMd: {
-    width: 8,
+    width:  8,
     height: 8,
   },
 
   // ── Label ───────────────────────────────────────────────────────────────────
   label: {
-    fontWeight: '600',
+    fontWeight:    '600',
     letterSpacing: 0.1,
   },
   labelSm: {
