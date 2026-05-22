@@ -1,23 +1,24 @@
+// =============================================================================
+// DreamDiary — useDreamAnalysis hook
+// =============================================================================
+// Orchestrates the two-step AI pipeline:
+//   1. Transcription  — audio URI → text  (Whisper via openai service)
+//   2. Analysis       — transcript → structured dream data (GPT-4o)
+//
+// Returns:
+//   transcript     — string | null, raw Whisper output
+//   analysis       — object | null, structured GPT-4o response
+//   isTranscribing — boolean
+//   isAnalyzing    — boolean
+//   error          — Error | null
+//   analyzeAudio   — (audioUri: string) => Promise<{ transcript, analysis } | null>
+//   reset          — () => void
+// =============================================================================
+
 import { useState, useCallback, useRef } from 'react';
 import { useStore } from '../store';
-import { openaiService } from '../services/openai';
+import { transcribeAudio, analyzeDream } from '../services/openai';
 
-/**
- * useDreamAnalysis
- *
- * Orchestrates the two-step AI pipeline:
- *   1. Transcription  — audio URI → text via openaiService.transcribeAudio
- *   2. Analysis       — transcript → structured dream data via openaiService.analyzeDream
- *
- * Returns:
- *   transcript     — string | null, raw Whisper output
- *   analysis       — object | null, structured GPT-4o response (see analyzeDream)
- *   isTranscribing — boolean
- *   isAnalyzing    — boolean
- *   error          — Error | null
- *   analyzeAudio   — (audioUri: string) => Promise<{ transcript, analysis } | null>
- *   reset          — () => void
- */
 export function useDreamAnalysis() {
   const [transcript, setTranscript] = useState(null);
   const [analysis, setAnalysis] = useState(null);
@@ -25,16 +26,17 @@ export function useDreamAnalysis() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [error, setError] = useState(null);
 
-  // Access zustand store setters
+  // Access zustand store setters (may be undefined if store is not yet hydrated)
   const setStoreTranscribing = useStore((s) => s.setIsTranscribing);
   const setStoreAnalyzing = useStore((s) => s.setIsAnalyzing);
 
-  // Allow in-flight requests to be cancelled when the hook unmounts or reset is called
+  // Allow in-flight requests to be cancelled when the hook unmounts or reset() is called
   const abortRef = useRef(false);
 
   // ─── reset ────────────────────────────────────────────────────────────────
   const reset = useCallback(() => {
     abortRef.current = true; // Signal any in-flight pipeline to bail out
+
     setTranscript(null);
     setAnalysis(null);
     setIsTranscribing(false);
@@ -45,7 +47,7 @@ export function useDreamAnalysis() {
     if (setStoreTranscribing) setStoreTranscribing(false);
     if (setStoreAnalyzing) setStoreAnalyzing(false);
 
-    // Re-arm after clearing so future calls work normally
+    // Re-arm for future calls
     abortRef.current = false;
   }, [setStoreTranscribing, setStoreAnalyzing]);
 
@@ -78,7 +80,7 @@ export function useDreamAnalysis() {
 
       let rawTranscript;
       try {
-        rawTranscript = await openaiService.transcribeAudio(audioUri);
+        rawTranscript = await transcribeAudio(audioUri);
 
         if (abortRef.current) return null;
 
@@ -89,8 +91,6 @@ export function useDreamAnalysis() {
           `Transcription failed: ${transcribeErr?.message ?? 'Unknown error'}`
         );
         setError(wrappedErr);
-        setIsTranscribing(false);
-        if (setStoreTranscribing) setStoreTranscribing(false);
         return null;
       } finally {
         setIsTranscribing(false);
@@ -113,7 +113,7 @@ export function useDreamAnalysis() {
 
       let dreamAnalysis;
       try {
-        dreamAnalysis = await openaiService.analyzeDream(rawTranscript);
+        dreamAnalysis = await analyzeDream(rawTranscript);
 
         if (abortRef.current) return null;
 
@@ -124,8 +124,6 @@ export function useDreamAnalysis() {
           `Dream analysis failed: ${analyzeErr?.message ?? 'Unknown error'}`
         );
         setError(wrappedErr);
-        setIsAnalyzing(false);
-        if (setStoreAnalyzing) setStoreAnalyzing(false);
         return null;
       } finally {
         setIsAnalyzing(false);
