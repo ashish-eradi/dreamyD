@@ -17,10 +17,19 @@ import {
   StyleSheet,
   ActivityIndicator,
   StatusBar,
+  Linking,
 } from 'react-native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import MainNavigator from './src/navigation';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { useFonts } from 'expo-font';
+import {
+  Lora_400Regular,
+  Lora_400Regular_Italic,
+  Lora_500Medium,
+  Lora_600SemiBold,
+  Lora_700Bold,
+} from '@expo-google-fonts/lora';
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
 import { supabase, onAuthStateChange, getProfile } from './src/services/supabase';
@@ -77,12 +86,22 @@ function SplashScreen() {
 // =============================================================================
 
 export default function App() {
+  // ── Fonts ─────────────────────────────────────────────────────────────────
+  const [fontsLoaded, fontError] = useFonts({
+    Lora_400Regular,
+    Lora_400Regular_Italic,
+    Lora_500Medium,
+    Lora_600SemiBold,
+    Lora_700Bold,
+  });
+
   // ── Store actions ─────────────────────────────────────────────────────────
-  const setSession   = useDreamStore((s) => s.setSession);
-  const setUser      = useDreamStore((s) => s.setUser);
-  const setIsLoading = useDreamStore((s) => s.setIsLoading);
-  const setIsPremium = useDreamStore((s) => s.setIsPremium);
-  const storeSignOut = useDreamStore((s) => s.signOut);
+  const setSession        = useDreamStore((s) => s.setSession);
+  const setUser           = useDreamStore((s) => s.setUser);
+  const setIsLoading      = useDreamStore((s) => s.setIsLoading);
+  const setIsPremium      = useDreamStore((s) => s.setIsPremium);
+  const setOnboardingDone = useDreamStore((s) => s.setOnboardingDone);
+  const storeSignOut      = useDreamStore((s) => s.signOut);
 
   // ── Store state ───────────────────────────────────────────────────────────
   const isLoading = useDreamStore(selectIsLoading);
@@ -97,6 +116,47 @@ export default function App() {
       console.log('[App] Notification tap → navigate to', data.openScreen);
     }
   }, []);
+
+  // ── Handle deep links (password reset, etc.) ───────────────────────────────
+  const handleDeepLink = useCallback(async (url) => {
+    if (!url) return;
+    try {
+      // Supabase sends: dreamdiary://auth/reset#access_token=...&type=recovery
+      // or:             dreamdiary://auth/reset?code=...
+      const parsed = new URL(url);
+
+      // PKCE flow — code param
+      const code = parsed.searchParams.get('code');
+      if (code) {
+        await supabase.auth.exchangeCodeForSession(code);
+        return;
+      }
+
+      // Implicit flow — hash fragment contains access_token + refresh_token
+      const hash = parsed.hash?.slice(1) ?? '';
+      const params = new URLSearchParams(hash);
+      const accessToken  = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      const type         = params.get('type');
+
+      if (type === 'recovery' && accessToken && refreshToken) {
+        await supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      }
+    } catch (err) {
+      console.warn('[App] handleDeepLink error:', err.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Handle link that opened the app from cold start
+    Linking.getInitialURL().then((url) => {
+      if (url) handleDeepLink(url);
+    }).catch(() => {});
+
+    // Handle link while app is already running
+    const sub = Linking.addEventListener('url', ({ url }) => handleDeepLink(url));
+    return () => sub.remove();
+  }, [handleDeepLink]);
 
   // ── Initialise notifications ────────────────────────────────────────────────
   useEffect(() => {
@@ -189,6 +249,16 @@ export default function App() {
       if (!profile) return;
 
       setIsPremium(profile.is_premium ?? false);
+      if (setOnboardingDone) setOnboardingDone(profile.onboarding_done ?? false);
+
+      // Merge name from the users table into the store's user object so
+      // Settings shows the correct name even if user_metadata wasn't set.
+      if (profile.name) {
+        const currentUser = useDreamStore.getState().user;
+        if (currentUser) {
+          setUser({ ...currentUser, user_metadata: { ...currentUser.user_metadata, full_name: profile.name } });
+        }
+      }
 
       // Re-schedule wake-up notification in case wake_time changed on another device
       if (profile.wake_time) {
@@ -204,7 +274,7 @@ export default function App() {
 
   // ── Render ──────────────────────────────────────────────────────────────────
 
-  if (isLoading) {
+  if (isLoading || (!fontsLoaded && !fontError)) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <SafeAreaProvider>

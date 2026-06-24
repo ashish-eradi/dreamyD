@@ -15,7 +15,7 @@ import WakeTimePickerScreen from '../screens/Onboarding/WakeTimePicker';
 import NotificationPermissionScreen from '../screens/Onboarding/NotificationPermission';
 
 // Auth
-import { SignUpScreen, SignInScreen } from '../screens/Auth';
+import { SignUpScreen, SignInScreen, ForgotPasswordScreen } from '../screens/Auth';
 
 // Main tabs
 import HomeScreen from '../screens/Home';
@@ -31,6 +31,8 @@ import DreamscapeMapScreen from '../screens/DreamscapeMap';
 import MonthlyReportScreen from '../screens/MonthlyReport';
 import LucidTrainerScreen from '../screens/LucidTrainer';
 import PaywallScreen from '../screens/Paywall';
+import ProfileEditScreen from '../screens/Profile/ProfileEditScreen';
+import NotificationsScreen from '../screens/Notifications/NotificationsScreen';
 
 const OnboardingStack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -64,39 +66,56 @@ function TabIcon({ name, color, size = 24 }) {
   return icons[name] || null;
 }
 
-// ─── Custom record button (lifted, peach circle) ────────────────────────────
-function RecordTabButton({ onPress, children }) {
+// ─── Custom record button — dark night circle lifted above the pill ──────────
+function RecordTabButton({ onPress, style, accessibilityState }) {
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={styles.recordBtnOuter}
-      activeOpacity={0.85}
+      style={[style, styles.recordBtnOuter]}
+      activeOpacity={0.82}
+      accessibilityRole="button"
+      accessibilityLabel="Record dream"
+      accessibilityState={accessibilityState}
     >
-      <View style={styles.recordBtn}>
-        <Text style={styles.recordBtnIcon}>⊙</Text>
-      </View>
+      <LinearGradient
+        colors={['#2a2350', '#1c1733']}
+        start={{ x: 0.3, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.recordBtn}
+      >
+        {/* Mic symbol in gold */}
+        <Text style={styles.recordBtnIcon}>♪</Text>
+      </LinearGradient>
     </TouchableOpacity>
   );
 }
 
 // ─── App tabs ────────────────────────────────────────────────────────────────
-function AppTabs({ navigation: navProp }) {
+function AppTabs() {
+  const isPremium = useStore(s => s.isPremium ?? false);
+
   return (
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
         tabBarStyle: styles.tabBar,
         tabBarBackground: () => (
-          <LinearGradient
-            colors={['transparent', COLORS.bg]}
-            start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
-            style={StyleSheet.absoluteFill}
-          />
+          <>
+            {/* Fade-to-paper gradient behind everything */}
+            <LinearGradient
+              colors={['rgba(247,243,236,0)', 'rgba(247,243,236,0.92)']}
+              start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            {/* White frosted pill */}
+            <View style={styles.tabPill} />
+          </>
         ),
         tabBarActiveTintColor: COLORS.ink,
-        tabBarInactiveTintColor: COLORS.ink3,
+        tabBarInactiveTintColor: COLORS.ink4,
         tabBarLabelStyle: styles.tabLabel,
         tabBarShowLabel: true,
+        tabBarHideOnKeyboard: true,
       }}
     >
       <Tab.Screen
@@ -130,6 +149,14 @@ function AppTabs({ navigation: navProp }) {
           tabBarLabel: 'Patterns',
           tabBarIcon: ({ color }) => <TabIcon name="patterns" color={color} />,
         }}
+        listeners={({ navigation }) => ({
+          tabPress: (e) => {
+            if (!isPremium) {
+              e.preventDefault();
+              navigation.navigate('Paywall');
+            }
+          },
+        })}
       />
       <Tab.Screen
         name="You"
@@ -146,12 +173,13 @@ function AppTabs({ navigation: navProp }) {
 // ─── Onboarding navigator ────────────────────────────────────────────────────
 function OnboardingNavigator() {
   return (
-    <OnboardingStack.Navigator screenOptions={{ headerShown: false }}>
+    <OnboardingStack.Navigator screenOptions={{ headerShown: false, gestureEnabled: false }}>
       <OnboardingStack.Screen name="Welcome" component={WelcomeScreen} />
       <OnboardingStack.Screen name="WakeTimePicker" component={WakeTimePickerScreen} />
       <OnboardingStack.Screen name="NotificationPermission" component={NotificationPermissionScreen} />
       <OnboardingStack.Screen name="SignUp" component={SignUpScreen} />
       <OnboardingStack.Screen name="SignIn" component={SignInScreen} />
+      <OnboardingStack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
     </OnboardingStack.Navigator>
   );
 }
@@ -170,10 +198,11 @@ function RootNavigator() {
       <RootStack.Screen name="DreamDetail" component={DreamDetailScreen} options={{ presentation: 'modal' }} />
       <RootStack.Screen name="ShareCard" component={ShareCardScreen} options={{ presentation: 'modal' }} />
       <RootStack.Screen name="PatternAnalysis" component={PatternAnalysisScreen} options={{ presentation: 'modal' }} />
-      <RootStack.Screen name="DreamscapeMap" component={DreamscapeMapScreen} options={{ presentation: 'modal' }} />
       <RootStack.Screen name="MonthlyReport" component={MonthlyReportScreen} options={{ presentation: 'modal' }} />
       <RootStack.Screen name="LucidTrainer" component={LucidTrainerScreen} options={{ presentation: 'modal' }} />
       <RootStack.Screen name="Paywall" component={PaywallScreen} options={{ presentation: 'modal' }} />
+      <RootStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ presentation: 'modal' }} />
+      <RootStack.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: 'modal' }} />
     </RootStack.Navigator>
   );
 }
@@ -192,26 +221,46 @@ const styles = StyleSheet.create({
     position: 'absolute',
     borderTopWidth: 0,
     elevation: 0,
-    height: Platform.OS === 'ios' ? 88 : 68,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 8,
+    height: Platform.OS === 'ios' ? 90 : 72,
+    paddingBottom: Platform.OS === 'ios' ? 26 : 10,
+    paddingTop: 10,
     backgroundColor: 'transparent',
   },
-  tabLabel: {
-    fontSize: 11, fontWeight: '500',
+  // White frosted pill background — positioned inside the gradient layer
+  tabPill: {
+    position: 'absolute',
+    bottom: Platform.OS === 'ios' ? 20 : 8,
+    left: 16,
+    right: 16,
+    height: 60,
+    borderRadius: 28,
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderWidth: 0.5,
+    borderColor: 'rgba(28,23,51,0.07)',
+    shadowColor: '#1c1733',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 24,
+    elevation: 6,
   },
+  tabLabel: {
+    fontSize: 10, fontWeight: '500', marginTop: 1,
+  },
+  // Record button — lifted dark night circle
   recordBtnOuter: {
-    top: -20,
+    top: -18,
     justifyContent: 'center',
     alignItems: 'center',
-    width: 64,
+    width: 60,
   },
   recordBtn: {
-    width: 60, height: 60, borderRadius: 30,
-    backgroundColor: COLORS.ink,
+    width: 52, height: 52, borderRadius: 26,
     alignItems: 'center', justifyContent: 'center',
-    shadowColor: COLORS.ink,
+    shadowColor: '#1c1733',
     shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.25, shadowRadius: 12, elevation: 8,
+    shadowOpacity: 0.35, shadowRadius: 18,
+    elevation: 10,
+    overflow: 'hidden',
   },
-  recordBtnIcon: { fontSize: 24, color: COLORS.bg2 },
+  recordBtnIcon: { fontSize: 20, color: '#f5d896' },
 });

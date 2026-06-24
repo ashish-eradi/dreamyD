@@ -10,25 +10,36 @@
 // =============================================================================
 
 export const COLORS = {
-  bg:    '#f6f1e8',   // warm cream paper
-  bg2:   '#fbf7ee',   // lighter paper
-  card:  '#ffffff',   // white cards
-  ink:   '#2a2622',   // dark charcoal
-  ink2:  '#5a544c',   // medium charcoal
-  ink3:  '#8a8278',   // muted brown-grey
-  ink4:  '#b8b0a4',   // faint
-  line:  '#e8dfd0',   // border color
-  line2: '#d8cebb',   // stronger border
-  peach: '#f4a585',   // primary accent (warm orange-pink)
-  peach2:'#fde8dc',   // peach tint bg
-  moss:  '#8aaf94',   // green accent
-  moss2: '#e3eee2',   // moss tint bg
-  sky:   '#9bb8d4',   // blue accent
-  sky2:  '#e4ecf5',   // sky tint bg
-  plum:  '#c1a3cc',   // purple accent
-  plum2: '#efe4f1',   // plum tint bg
-  gold:  '#d4a574',   // warm gold
-  gold2: '#f5e8d4',   // gold tint bg
+  // Paper / background — from design's --paper
+  bg:    '#f7f3ec',   // warm off-white (design: #f7f3ec)
+  bg2:   '#efe9df',   // slightly deeper paper (design: #efe9df)
+  card:  '#ffffff',
+
+  // Ink — from design's --ink hierarchy
+  ink:   '#1c1733',   // deep night-indigo (design: #1c1733)
+  ink2:  '#3a3354',   // (design: #3a3354)
+  ink3:  '#6e6788',   // (design: #6e6788)
+  ink4:  '#9c97ac',   // (design: #9c97ac)
+
+  // Borders
+  line:  'rgba(36,30,60,0.08)',   // (design: --line)
+  line2: 'rgba(36,30,60,0.14)',   // (design: --line-2)
+
+  // Accent palette — from design
+  peach: '#e9a78a',   // (design: --peach)
+  peach2:'#fde8dc',   // peach tint
+  moon:  '#f5d896',   // (design: --moon gold)
+  gold:  '#f5d896',   // alias for moon
+  gold2: '#fbf2d6',   // gold tint bg (design: --joy-bg)
+  lilac: '#b9a8e4',   // (design: --lilac)
+
+  // Secondary accents (kept for chip system)
+  moss:  '#9ec5b8',   // (design: --calm)
+  moss2: '#e2eee9',   // (design: --calm-bg)
+  sky:   '#92a8c9',   // (design: --melan)
+  sky2:  '#e0e8f1',   // (design: --melan-bg)
+  plum:  '#b9a8e4',   // (design: --lilac / fear)
+  plum2: '#ece4f5',   // (design: --fear-bg)
 };
 
 // =============================================================================
@@ -36,12 +47,13 @@ export const COLORS = {
 // =============================================================================
 
 export const MOODS = {
-  joy:    { label: 'Joyful',   color: '#e7b75e', bg: '#fbeed5', emoji: '☀' },
-  calm:   { label: 'Peaceful', color: '#7ea98a', bg: '#dfecdf', emoji: '~' },
-  fear:   { label: 'Anxious',  color: '#b78db8', bg: '#ecdcec', emoji: '!' },
-  melan:  { label: 'Tender',   color: '#7fa2c0', bg: '#dde8f1', emoji: '♡' },
-  wonder: { label: 'Wonder',   color: '#d4885e', bg: '#f6dccb', emoji: '✦' },
-  anger:  { label: 'Charged',  color: '#c97a5a', bg: '#f3d5c8', emoji: '◆' },
+  // Colors matched to design's --emotion variables
+  joy:    { label: 'Joyful',   color: '#9c7716', bg: '#fbf2d6', emoji: '☀' },
+  calm:   { label: 'Peaceful', color: '#3e6e5e', bg: '#e2eee9', emoji: '~' },
+  fear:   { label: 'Anxious',  color: '#5d428c', bg: '#ece4f5', emoji: '!' },
+  melan:  { label: 'Tender',   color: '#3e5b80', bg: '#e0e8f1', emoji: '♡' },
+  wonder: { label: 'Wonder',   color: '#5d428c', bg: '#ece4f5', emoji: '✦' },
+  anger:  { label: 'Charged',  color: '#834638', bg: '#f1ddd5', emoji: '◆' },
 };
 
 // =============================================================================
@@ -49,18 +61,19 @@ export const MOODS = {
 // =============================================================================
 
 export const SYMBOLS = {
-  water:   { color: '#7fa2c0', bg: '#dde8f1' },
-  ocean:   { color: '#7fa2c0', bg: '#dde8f1' },
-  falling: { color: '#b78db8', bg: '#ecdcec' },
-  flying:  { color: '#e7b75e', bg: '#fbeed5' },
-  chase:   { color: '#c97a5a', bg: '#f3d5c8' },
-  people:  { color: '#7ea98a', bg: '#dfecdf' },
-  school:  { color: '#b78db8', bg: '#ecdcec' },
-  forest:  { color: '#7ea98a', bg: '#dfecdf' },
-  house:   { color: '#d4a574', bg: '#f5e8d4' },
-  light:   { color: '#e7b75e', bg: '#fbeed5' },
-  door:    { color: '#b78db8', bg: '#ecdcec' },
-  lost:    { color: '#8a8278', bg: '#e8e3d8' },
+  // Colors from design's SYMBOL_LIBRARY hues
+  water:   { color: '#3e5b80', bg: '#e0e8f1' },
+  ocean:   { color: '#3e5b80', bg: '#e0e8f1' },
+  falling: { color: '#5d428c', bg: '#ece4f5' },
+  flying:  { color: '#9c7716', bg: '#fbf2d6' },
+  chase:   { color: '#834638', bg: '#f1ddd5' },
+  people:  { color: '#3e6e5e', bg: '#e2eee9' },
+  school:  { color: '#5d428c', bg: '#ece4f5' },
+  forest:  { color: '#3e6e5e', bg: '#e2eee9' },
+  house:   { color: '#9c7716', bg: '#fbf2d6' },
+  light:   { color: '#9c7716', bg: '#fbf2d6' },
+  door:    { color: '#5d428c', bg: '#ece4f5' },
+  lost:    { color: '#6e6788', bg: '#ece4f5' },
 };
 
 // =============================================================================

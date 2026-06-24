@@ -1,25 +1,36 @@
 import React, { useState } from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, StatusBar, Alert,
+  View, Text, TouchableOpacity, StyleSheet, StatusBar,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNotifications } from '../../hooks/useNotifications';
+import { formatWakeTimeTo24h } from '../../utils';
 import { COLORS } from '../../constants/theme';
 
 export default function NotificationPermissionScreen() {
   const navigation = useNavigation();
+  const route = useRoute();
   const insets = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
+  const { requestPermissions, scheduleNotification } = useNotifications();
+
+  const wakeTime = route.params?.wakeTime ?? null;
 
   const handleAllow = async () => {
     setLoading(true);
     try {
-      navigation.navigate('SignUp');
+      const granted = await requestPermissions();
+      if (granted && wakeTime) {
+        const time24h = formatWakeTimeTo24h(wakeTime);
+        if (time24h) await scheduleNotification(time24h);
+      }
     } catch {
-      navigation.navigate('SignUp');
+      // permission / schedule errors are non-fatal
     } finally {
       setLoading(false);
     }
+    navigation.navigate('SignUp', { wakeTime });
   };
 
   return (
@@ -64,7 +75,7 @@ export default function NotificationPermissionScreen() {
         <TouchableOpacity style={styles.ctaBtn} onPress={handleAllow} disabled={loading} activeOpacity={0.85}>
           <Text style={styles.ctaBtnText}>Allow notifications</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.skipBtn} onPress={() => navigation.navigate('SignUp')}>
+        <TouchableOpacity style={styles.skipBtn} onPress={() => navigation.navigate('SignUp', { wakeTime })}>
           <Text style={styles.skipBtnText}>Maybe later</Text>
         </TouchableOpacity>
       </View>

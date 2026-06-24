@@ -6,13 +6,29 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { signInWithEmail } from '../../services/supabase';
+import { useDreamStore } from '../../store';
 import { COLORS } from '../../constants/theme';
+
+function friendlyAuthError(raw) {
+  const msg = (raw || '').toLowerCase();
+  if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('email not confirmed')) {
+    return 'Invalid email or password. Please check and try again.';
+  }
+  if (msg.includes('rate limit') || msg.includes('too many')) {
+    return 'Too many attempts. Please wait a moment and try again.';
+  }
+  if (msg.includes('network') || msg.includes('fetch')) {
+    return 'Network error. Please check your connection and try again.';
+  }
+  return raw || 'Sign in failed. Please try again.';
+}
 
 export default function SignInScreen() {
   const navigation = useNavigation();
   const insets = useSafeAreaInsets();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const passwordRef = useRef(null);
@@ -23,9 +39,14 @@ export default function SignInScreen() {
     if (!password) { setError('Enter your password.'); return; }
     setLoading(true);
     try {
-      await signInWithEmail(email.trim(), password);
+      const session = await signInWithEmail(email.trim(), password);
+      // Directly update the store so navigation happens immediately,
+      // without waiting for the onAuthStateChange event to propagate.
+      if (session) {
+        useDreamStore.getState().setSession(session);
+      }
     } catch (err) {
-      setError(err?.message || 'Sign in failed. Please try again.');
+      setError(friendlyAuthError(err?.message));
     } finally {
       setLoading(false);
     }
@@ -63,17 +84,34 @@ export default function SignInScreen() {
             />
 
             <Text style={styles.inputLabel}>Password</Text>
-            <TextInput
-              ref={passwordRef}
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Your password"
-              placeholderTextColor={COLORS.ink3}
-              secureTextEntry
-              returnKeyType="done"
-              onSubmitEditing={handleSignIn}
-            />
+            <View style={styles.passwordRow}>
+              <TextInput
+                ref={passwordRef}
+                style={[styles.input, styles.passwordInput]}
+                value={password}
+                onChangeText={setPassword}
+                placeholder="Your password"
+                placeholderTextColor={COLORS.ink3}
+                secureTextEntry={!passwordVisible}
+                returnKeyType="done"
+                onSubmitEditing={handleSignIn}
+              />
+              <TouchableOpacity
+                style={styles.eyeBtn}
+                onPress={() => setPasswordVisible(v => !v)}
+                accessibilityRole="button"
+                accessibilityLabel={passwordVisible ? 'Hide password' : 'Show password'}
+              >
+                <Text style={styles.eyeBtnText}>{passwordVisible ? '⊘' : '⊙'}</Text>
+              </TouchableOpacity>
+            </View>
+
+            <TouchableOpacity
+              style={styles.forgotBtn}
+              onPress={() => navigation.navigate('ForgotPassword')}
+            >
+              <Text style={styles.forgotBtnText}>Forgot password?</Text>
+            </TouchableOpacity>
 
             {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
@@ -126,6 +164,15 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16, fontSize: 16, color: COLORS.ink,
     marginBottom: 16,
   },
+  passwordRow: { position: 'relative', marginBottom: 16 },
+  passwordInput: { marginBottom: 0, paddingRight: 48 },
+  eyeBtn: {
+    position: 'absolute', right: 0, top: 0, bottom: 0,
+    width: 48, alignItems: 'center', justifyContent: 'center',
+  },
+  eyeBtnText: { fontSize: 18, color: COLORS.ink3 },
+  forgotBtn: { alignSelf: 'flex-end', marginBottom: 12, marginTop: -8 },
+  forgotBtnText: { fontSize: 13, color: COLORS.ink3, fontWeight: '500' },
   errorText: { fontSize: 13, color: '#c0392b', marginBottom: 12 },
   ctaBtn: {
     height: 52, borderRadius: 26, backgroundColor: COLORS.ink,

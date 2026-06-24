@@ -128,8 +128,8 @@ export default function RecordButton({ onPress, isRecording = false, size = 100 
 
     breathScale.value = withRepeat(
       withSequence(
-        withTiming(1.05, { duration: 1600, easing: Easing.inOut(Easing.sine) }),
-        withTiming(1.00, { duration: 1600, easing: Easing.inOut(Easing.sine) }),
+        withTiming(1.05, { duration: 1600, easing: Easing.inOut(Easing.sin) }),
+        withTiming(1.00, { duration: 1600, easing: Easing.inOut(Easing.sin) }),
       ),
       -1,
       false

@@ -43,6 +43,7 @@ const createAuthSlice = (set) => ({
   session: null,
   isLoading: true,   // starts true — App.js flips to false after session check
   isPremium: false,
+  onboardingDone: false,
 
   // ── Actions ───────────────────────────────────────────────────────────────
   setUser: (user) => set({ user }),
@@ -58,12 +59,14 @@ const createAuthSlice = (set) => ({
 
   setIsPremium: (isPremium) => set({ isPremium }),
   setPremium: (isPremium) => set({ isPremium }),
+  setOnboardingDone: (onboardingDone) => set({ onboardingDone }),
 
   signOut: () =>
     set({
       user: null,
       session: null,
       isPremium: false,
+      onboardingDone: false,
     }),
 });
 

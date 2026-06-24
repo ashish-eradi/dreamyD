@@ -10,6 +10,29 @@
 // =============================================================================
 
 /**
+ * Convert a 12-hour time string (e.g. "06:30 AM") to a 24-hour "HH:MM:SS"
+ * string suitable for storing in the database wake_time column.
+ * Returns null if the input cannot be parsed.
+ *
+ * @param {string} time12h — e.g. "06:30 AM" or "11:45 PM"
+ * @returns {string | null} — e.g. "06:30:00" or "23:45:00"
+ */
+export function formatWakeTimeTo24h(time12h) {
+  if (!time12h || typeof time12h !== 'string') return null;
+  const match = time12h.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (!match) return null;
+  let hour = parseInt(match[1], 10);
+  const minute = match[2];
+  const period = match[3].toUpperCase();
+  if (period === 'AM') {
+    if (hour === 12) hour = 0;
+  } else {
+    if (hour !== 12) hour += 12;
+  }
+  return `${String(hour).padStart(2, '0')}:${minute}:00`;
+}
+
+/**
  * Format a date as a long human-readable string.
  *
  * @param {Date | string | number} date

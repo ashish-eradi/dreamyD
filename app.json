@@ -1,15 +1,16 @@
 {
   "expo": {
     "name": "DreamDiary",
-    "slug": "dreamdiary",
+    "slug": "deamy-d",
     "version": "1.0.0",
     "orientation": "portrait",
+    "scheme": "dreamdiary",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0D0D1A"
+      "backgroundColor": "#f6f1e8"
     },
     "assetBundlePatterns": [
       "**/*"
@@ -19,9 +20,6 @@
       "bundleIdentifier": "com.dreamdiary.app",
       "infoPlist": {
         "NSMicrophoneUsageDescription": "DreamDiary needs microphone access to record your dream narratives.",
-        "NSPhotoLibraryUsageDescription": "DreamDiary needs access to your photo library to attach images to dreams.",
-        "NSPhotoLibraryAddUsageDescription": "DreamDiary needs permission to save dream visualizations to your photo library.",
-        "NSCameraUsageDescription": "DreamDiary needs camera access to capture images for your dream journal.",
         "UIBackgroundModes": [
           "audio",
           "fetch",
@@ -32,20 +30,16 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0D0D1A"
+        "backgroundColor": "#f6f1e8"
       },
       "package": "com.dreamdiary.app",
       "permissions": [
-        "RECORD_AUDIO",
-        "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE",
-        "READ_MEDIA_IMAGES",
-        "WRITE_EXTERNAL_STORAGE",
-        "READ_EXTERNAL_STORAGE",
-        "CAMERA",
-        "POST_NOTIFICATIONS"
-      ],
-      "googleServicesFile": "./google-services.json"
+        "android.permission.RECORD_AUDIO",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.VIBRATE",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.MODIFY_AUDIO_SETTINGS"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -69,28 +63,13 @@
       ],
       [
         "expo-secure-store"
-      ],
-      [
-        "expo-media-library",
-        {
-          "photosPermission": "Allow DreamDiary to access your photos.",
-          "savePhotosPermission": "Allow DreamDiary to save photos.",
-          "isAccessMediaLocationEnabled": true
-        }
-      ],
-      [
-        "expo-image-picker",
-        {
-          "photosPermission": "Allow DreamDiary to access your photos for dream imagery.",
-          "cameraPermission": "Allow DreamDiary to use the camera."
-        }
       ]
     ],
     "extra": {
       "eas": {
-        "projectId": "your-eas-project-id"
+        "projectId": "1c6f0ea2-edfc-4fc4-ac5a-501ff7e06137"
       }
     },
-    "owner": "dreamdiary"
+    "owner": "ashish-eradi"
   }
 }

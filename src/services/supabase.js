@@ -95,7 +95,20 @@ export async function signUpWithEmail(email, password, name) {
     },
   });
   if (error) throw error;
-  return data.session;
+  // Return both so callers can detect the "email confirmation required" case
+  // (session is null but user exists) vs an immediate session.
+  return { session: data.session, user: data.user };
+}
+
+/**
+ * Send a password-reset email via Supabase.
+ * @param {string} email
+ */
+export async function resetPasswordForEmail(email) {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: 'dreamdiary://auth/reset',
+  });
+  if (error) throw error;
 }
 
 /**

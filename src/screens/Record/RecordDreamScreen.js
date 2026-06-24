@@ -1,641 +1,274 @@
 // =============================================================================
-// DreamDiary V3 — RecordDreamScreen (Capture)
-// =============================================================================
-// Warm paper / cream aesthetic with a peach→gold-tint→cream gradient bg.
-// 4 phases: idle → rec → proc → done
-// Hold-to-record button at the absolute bottom.
+// DreamDiary — RecordDreamScreen
+// Design: dark night capture screen matching DreamDiary.html VoiceCapture
+// Phases: idle → recording → transcribing → review
 // =============================================================================
 
-import React, {
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-} from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  StatusBar,
-  ActivityIndicator,
-  Platform,
-  PanResponder,
-  Dimensions,
+  View, Text, TouchableOpacity, StyleSheet,
+  StatusBar, Platform, PanResponder, Dimensions,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withRepeat,
-  withSequence,
-  withTiming,
-  withSpring,
-  Easing,
-  FadeIn,
-  FadeInDown,
-  FadeOut,
-  ZoomIn,
+  useSharedValue, useAnimatedStyle,
+  withRepeat, withSequence, withTiming, withDelay, withSpring,
+  Easing, FadeIn, FadeOut, ZoomIn,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useAudioRecorder } from '../../hooks/useAudioRecorder';
-import { useDreamAnalysis } from '../../hooks/useDreamAnalysis';
-import { useDreamStore } from '../../store';
+import { useAudioRecorder }  from '../../hooks/useAudioRecorder';
+import { useDreamAnalysis }  from '../../hooks/useDreamAnalysis';
+import { useDreamStore }     from '../../store';
 import { saveDream, saveTags, uploadAudio } from '../../services/supabase';
-import { getTopEmotion, getTopSymbols } from '../../utils';
-import { COLORS, getMoodStyle, getSymbolStyle } from '../../constants/theme';
+import { getTopEmotion, getTopSymbols }     from '../../utils';
+import { getMoodStyle, getSymbolStyle }     from '../../constants/theme';
 
-// =============================================================================
-// Constants
-// =============================================================================
+const { width: SW } = Dimensions.get('window');
 
-const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const PHASES = { IDLE: 'idle', REC: 'rec', PROC: 'proc', DONE: 'done' };
 
-const PHASES = {
-  IDLE: 'idle',
-  REC:  'rec',
-  PROC: 'proc',
-  DONE: 'done',
-};
-
-// =============================================================================
-// Format seconds as mm:ss
-// =============================================================================
-
-function formatDuration(seconds) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
-  return `${m}:${String(s).padStart(2, '0')}`;
+function fmt(s) {
+  const m = Math.floor(s / 60), r = Math.floor(s % 60);
+  return `${String(m).padStart(2,'0')}:${String(r).padStart(2,'0')}`;
 }
 
-// =============================================================================
-// Concentric breathing rings (rec phase)
-// =============================================================================
+// ─── Star positions (deterministic) ──────────────────────────────────────────
 
-function BreathingRings() {
-  const s1 = useSharedValue(1);
-  const s2 = useSharedValue(1);
-  const s3 = useSharedValue(1);
+const STARS = [
+  { x:'6%',  y:'8%',  sz:2, delay:0    },
+  { x:'18%', y:'5%',  sz:1, delay:700  },
+  { x:'34%', y:'11%', sz:2, delay:1300 },
+  { x:'52%', y:'4%',  sz:1, delay:400  },
+  { x:'67%', y:'14%', sz:2, delay:900  },
+  { x:'83%', y:'6%',  sz:1, delay:1600 },
+  { x:'92%', y:'20%', sz:2, delay:200  },
+  { x:'4%',  y:'28%', sz:1, delay:1100 },
+  { x:'14%', y:'22%', sz:2, delay:500  },
+  { x:'76%', y:'30%', sz:1, delay:800  },
+  { x:'90%', y:'45%', sz:2, delay:1400 },
+  { x:'8%',  y:'55%', sz:1, delay:300  },
+  { x:'30%', y:'70%', sz:2, delay:1000 },
+  { x:'60%', y:'80%', sz:1, delay:600  },
+  { x:'85%', y:'72%', sz:2, delay:1700 },
+  { x:'45%', y:'90%', sz:1, delay:250  },
+  { x:'20%', y:'85%', sz:2, delay:950  },
+  { x:'72%', y:'92%', sz:1, delay:1200 },
+  { x:'96%', y:'60%', sz:2, delay:450  },
+  { x:'50%', y:'50%', sz:1, delay:1500 },
+];
 
+function Star({ x, y, sz, delay }) {
+  const op = useSharedValue(0.2);
   useEffect(() => {
-    const ease = Easing.inOut(Easing.sine);
-    s1.value = withRepeat(
+    op.value = withDelay(delay, withRepeat(
       withSequence(
-        withTiming(1.06, { duration: 1800, easing: ease }),
-        withTiming(0.96, { duration: 1800, easing: ease }),
+        withTiming(1,   { duration: 1400 }),
+        withTiming(0.15,{ duration: 1400 }),
       ), -1, false
-    );
-    s2.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 300, easing: ease }),
-        withTiming(1.08, { duration: 1800, easing: ease }),
-        withTiming(0.94, { duration: 1800, easing: ease }),
-      ), -1, false
-    );
-    s3.value = withRepeat(
-      withSequence(
-        withTiming(1, { duration: 600, easing: ease }),
-        withTiming(1.10, { duration: 1800, easing: ease }),
-        withTiming(0.92, { duration: 1800, easing: ease }),
-      ), -1, false
-    );
+    ));
   }, []);
-
-  const a1 = useAnimatedStyle(() => ({
-    transform: [{ scale: s1.value }],
-    opacity: 0.50,
-  }));
-  const a2 = useAnimatedStyle(() => ({
-    transform: [{ scale: s2.value }],
-    opacity: 0.35,
-  }));
-  const a3 = useAnimatedStyle(() => ({
-    transform: [{ scale: s3.value }],
-    opacity: 0.22,
-  }));
-
+  const style = useAnimatedStyle(() => ({ opacity: op.value }));
   return (
-    <View style={ringStyles.container}>
-      {/* Outermost ring */}
-      <Animated.View style={[ringStyles.ring, ringStyles.ring3, a3]} />
-      {/* Middle ring */}
-      <Animated.View style={[ringStyles.ring, ringStyles.ring2, a2]} />
-      {/* Inner ring */}
-      <Animated.View style={[ringStyles.ring, ringStyles.ring1, a1]} />
-      {/* Core circle */}
-      <View style={ringStyles.core} />
+    <Animated.View style={[style, {
+      position:'absolute', left:x, top:y,
+      width:sz, height:sz, borderRadius:sz/2, backgroundColor:'#ffffff',
+    }]} />
+  );
+}
+
+function StarField() {
+  return (
+    <View style={StyleSheet.absoluteFill} pointerEvents="none">
+      {STARS.map((s,i) => <Star key={i} {...s} />)}
     </View>
   );
 }
 
-const ringStyles = StyleSheet.create({
-  container: {
-    width:           220,
-    height:          220,
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  ring: {
-    position:     'absolute',
-    borderRadius: 999,
-    borderWidth:  1,
-    borderColor:  COLORS.peach,
-  },
-  ring1: {
-    width:  160,
-    height: 160,
-  },
-  ring2: {
-    width:  190,
-    height: 190,
-  },
-  ring3: {
-    width:  220,
-    height: 220,
-  },
-  core: {
-    width:           100,
-    height:          100,
-    borderRadius:    50,
-    backgroundColor: COLORS.peach,
-    opacity:         0.85,
-  },
-});
+// ─── Waveform (recording phase) ───────────────────────────────────────────────
 
-// =============================================================================
-// Pulsing proc circle
-// =============================================================================
+function Waveform({ duration }) {
+  const bars = 28;
+  return (
+    <View style={styles.waveform}>
+      {[...Array(bars)].map((_,i) => {
+        const h = 8 + Math.abs(Math.sin(duration * 4 + i * 0.7)) * 38 + (i % 5) * 4;
+        return (
+          <View key={i} style={[styles.waveBar, { height: Math.min(h, 54) }]} />
+        );
+      })}
+    </View>
+  );
+}
 
-function ProcCircle() {
+// ─── Pulsing transcribing circle ──────────────────────────────────────────────
+
+function TranscribingCircle() {
   const scale = useSharedValue(1);
-
   useEffect(() => {
     scale.value = withRepeat(
       withSequence(
-        withTiming(1.10, { duration: 900, easing: Easing.inOut(Easing.sine) }),
-        withTiming(0.93, { duration: 900, easing: Easing.inOut(Easing.sine) }),
+        withTiming(1.15, { duration: 900, easing: Easing.inOut(Easing.sin) }),
+        withTiming(0.90, { duration: 900, easing: Easing.inOut(Easing.sin) }),
       ), -1, false
     );
   }, []);
-
-  const animStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
+  const animStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   return (
-    <Animated.View style={animStyle}>
+    <Animated.View style={[animStyle, styles.transcribeCircle]}>
       <LinearGradient
-        colors={[COLORS.peach, COLORS.gold]}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={procStyles.circle}
+        colors={['#fff5d9','#f0c876','#c98f3d']}
+        start={{ x:0.32, y:0.32 }}
+        end={{ x:1, y:1 }}
+        style={styles.transcribeCircleGrad}
       />
     </Animated.View>
   );
 }
 
-const procStyles = StyleSheet.create({
-  circle: {
-    width:        90,
-    height:       90,
-    borderRadius: 45,
-  },
-});
+// ─── Moon hold-to-record button ───────────────────────────────────────────────
 
-// =============================================================================
-// Hold-to-record button
-// =============================================================================
+function MoonButton({ phase, onHoldStart, onHoldEnd }) {
+  const isHeld  = phase === PHASES.REC;
+  const scale   = useSharedValue(1);
+  const glow    = useSharedValue(0);
 
-function HoldButton({ phase, onHoldStart, onHoldEnd }) {
-  const isHeld = phase === PHASES.REC;
-
-  const scale = useSharedValue(1);
-
-  // Gentle idle breathe
   useEffect(() => {
     if (phase === PHASES.IDLE) {
       scale.value = withRepeat(
         withSequence(
-          withTiming(1.04, { duration: 1400, easing: Easing.inOut(Easing.sine) }),
-          withTiming(0.97, { duration: 1400, easing: Easing.inOut(Easing.sine) }),
+          withTiming(1.04, { duration: 1400, easing: Easing.inOut(Easing.sin) }),
+          withTiming(0.97, { duration: 1400, easing: Easing.inOut(Easing.sin) }),
         ), -1, false
       );
+      glow.value = withTiming(0, { duration: 200 });
     } else {
-      scale.value = withSpring(isHeld ? 1.06 : 1, { damping: 10, stiffness: 120 });
+      scale.value = withSpring(isHeld ? 1.08 : 1, { damping: 10 });
+      glow.value  = withTiming(isHeld ? 1 : 0, { duration: 200 });
     }
   }, [phase]);
 
-  const animStyle = useAnimatedStyle(() => ({
+  const btnStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
+    shadowOpacity: isHeld ? 0.55 : 0.35,
+    shadowRadius:  isHeld ? 40 : 24,
   }));
 
-  // PanResponder for press-and-hold
-  const panResponder = useRef(
-    PanResponder.create({
-      onStartShouldSetPanResponder: () => true,
-      onMoveShouldSetPanResponder:  () => false,
-      onPanResponderGrant: () => {
-        onHoldStart();
-      },
-      onPanResponderRelease: () => {
-        onHoldEnd();
-      },
-      onPanResponderTerminate: () => {
-        onHoldEnd();
-      },
-    })
-  ).current;
+  const panRef = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder:  () => false,
+    onPanResponderGrant:     onHoldStart,
+    onPanResponderRelease:   onHoldEnd,
+    onPanResponderTerminate: onHoldEnd,
+  })).current;
 
-  const isActive = isHeld;
-
-  return (
-    <View style={holdStyles.wrap}>
-      <Animated.View
-        style={[
-          holdStyles.button,
-          isActive
-            ? {
-                backgroundColor: COLORS.peach,
-                shadowColor:     COLORS.peach,
-                shadowOpacity:   0.5,
-                shadowRadius:    24,
-              }
-            : {
-                backgroundColor: COLORS.ink,
-                shadowColor:     '#000',
-                shadowOpacity:   0.30,
-                shadowRadius:    16,
-              },
-          animStyle,
-        ]}
-        {...panResponder.panHandlers}
-      >
-        {/* Mic SVG-ish icon via Unicode */}
-        <Text style={holdStyles.micIcon}>♪</Text>
-      </Animated.View>
-      <Text style={holdStyles.label}>
-        {isActive ? 'Release to finish' : 'Hold to record'}
-      </Text>
-    </View>
-  );
-}
-
-const holdStyles = StyleSheet.create({
-  wrap: {
-    alignItems: 'center',
-    gap:        10,
-  },
-  button: {
-    width:          96,
-    height:         96,
-    borderRadius:   48,
-    alignItems:     'center',
-    justifyContent: 'center',
-    shadowOffset:   { width: 0, height: 8 },
-    elevation:      10,
-  },
-  micIcon: {
-    fontSize: 36,
-    color:    COLORS.bg2,
-  },
-  label: {
-    fontSize:  13,
-    color:     COLORS.ink3,
-    fontWeight: '500',
-  },
-});
-
-// =============================================================================
-// Phase: Idle
-// =============================================================================
-
-function IdlePhase() {
   return (
     <Animated.View
-      entering={FadeIn.duration(350)}
-      exiting={FadeOut.duration(200)}
-      style={phaseStyles.centered}
+      style={[styles.moonBtn, btnStyle, {
+        shadowColor: isHeld ? '#e9a78a' : '#f5d896',
+      }]}
+      {...panRef.panHandlers}
     >
-      <Text style={phaseStyles.headline}>
-        {'Speak it before\nit dissolves.'}
-      </Text>
-      <Text style={phaseStyles.sub}>
-        Hold the button below. Talk it through — we'll transcribe and tag it.
-      </Text>
+      <LinearGradient
+        colors={isHeld
+          ? ['#fff5d9','#e9a78a','#d68a6b']
+          : ['#fff5d9','#f0c876','#c98f3d']
+        }
+        start={{ x:0.32, y:0.32 }}
+        end={{ x:1, y:1 }}
+        style={StyleSheet.absoluteFill}
+      />
     </Animated.View>
   );
 }
 
-// =============================================================================
-// Phase: Rec
-// =============================================================================
+// ─── Review card (done phase) ─────────────────────────────────────────────────
 
-function RecPhase({ duration }) {
-  return (
-    <Animated.View
-      entering={FadeIn.duration(300)}
-      exiting={FadeOut.duration(200)}
-      style={phaseStyles.centered}
-    >
-      <BreathingRings />
-      <Text style={[phaseStyles.sub, { marginTop: 24, fontStyle: 'italic' }]}>
-        I'm listening…
-      </Text>
-      <Text style={phaseStyles.timer}>{formatDuration(duration)}</Text>
-    </Animated.View>
-  );
-}
-
-// =============================================================================
-// Phase: Proc
-// =============================================================================
-
-function ProcPhase() {
-  return (
-    <Animated.View
-      entering={FadeIn.duration(300)}
-      exiting={FadeOut.duration(200)}
-      style={phaseStyles.centered}
-    >
-      <ProcCircle />
-      <Text style={[phaseStyles.headline, { marginTop: 28, fontSize: 22 }]}>
-        Reading the stars…
-      </Text>
-      <Text style={phaseStyles.procSub}>
-        Transcribing · tagging · shelving
-      </Text>
-    </Animated.View>
-  );
-}
-
-// =============================================================================
-// Phase: Done
-// =============================================================================
-
-function DonePhase({ analysis, transcript, onSave, onReRecord }) {
+function ReviewCard({ analysis, transcript, aiUnavailable, onSave, onReRecord }) {
   const tags       = analysis?.tags ?? [];
   const topEmotion = getTopEmotion(tags);
   const topSymbols = getTopSymbols(tags, 3);
   const moodStyle  = getMoodStyle(topEmotion?.label ?? null);
-
-  const summary = analysis?.summary ?? transcript ?? '';
-  const title   = analysis?.title   ?? 'The amber library';
+  const summary    = analysis?.summary ?? transcript ?? '';
+  const title      = analysis?.title   ?? 'Untitled dream';
 
   return (
-    <Animated.View
-      entering={ZoomIn.duration(400)}
-      style={phaseStyles.doneWrap}
-    >
-      {/* White card */}
-      <View style={doneStyles.card}>
-        {/* Title */}
-        <Text style={doneStyles.cardTitle}>{title}</Text>
+    <Animated.View entering={ZoomIn.duration(380)} style={styles.reviewWrap}>
+      <Text style={styles.reviewTitle}>{title}</Text>
 
-        {/* Quote text with left border */}
-        <View style={doneStyles.quoteWrap}>
-          <View style={doneStyles.quoteBorder} />
-          <Text style={doneStyles.quoteText} numberOfLines={6}>
+      {/* Frosted transcript card */}
+      <View style={styles.reviewCard}>
+        {aiUnavailable ? (
+          <Text style={[styles.reviewText, { opacity: 0.5 }]}>
+            Audio captured. AI transcription is not available yet — your dream will be saved with the recording.
+          </Text>
+        ) : (
+          <Text style={styles.reviewText} numberOfLines={5}>
             {summary || 'Your dream has been captured.'}
           </Text>
-        </View>
-
-        {/* Mood + symbol pills */}
-        <View style={doneStyles.pillsRow}>
-          {topEmotion && (
-            <View
-              style={[doneStyles.moodPill, { backgroundColor: moodStyle.bg }]}
-            >
-              <View
-                style={[doneStyles.moodDot, { backgroundColor: moodStyle.color }]}
-              />
-              <Text style={[doneStyles.pillText, { color: moodStyle.color }]}>
-                {moodStyle.label}
-              </Text>
-            </View>
-          )}
-          {topSymbols.map((sym) => {
-            const symStyle = getSymbolStyle(sym.label);
-            return (
-              <View
-                key={sym.id ?? sym.label}
-                style={[doneStyles.symbolPill, { backgroundColor: symStyle.bg }]}
-              >
-                <Text style={[doneStyles.pillText, { color: symStyle.color }]}>
-                  {sym.label.charAt(0).toUpperCase() + sym.label.slice(1)}
-                </Text>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Save button */}
-        <TouchableOpacity
-          onPress={onSave}
-          activeOpacity={0.88}
-          style={doneStyles.saveBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Save to journal"
-        >
-          <Text style={doneStyles.saveBtnText}>Save to journal</Text>
-        </TouchableOpacity>
-
-        {/* Re-record ghost button */}
-        <TouchableOpacity
-          onPress={onReRecord}
-          activeOpacity={0.75}
-          style={doneStyles.reRecordBtn}
-          accessibilityRole="button"
-          accessibilityLabel="Re-record"
-        >
-          <Text style={doneStyles.reRecordBtnText}>Re-record</Text>
-        </TouchableOpacity>
+        )}
       </View>
+
+      {/* Tags */}
+      <View style={styles.reviewTags}>
+        {topEmotion && (
+          <View style={[styles.tag, styles.moodTag]}>
+            <View style={[styles.tagDot, { backgroundColor: moodStyle.color }]} />
+            <Text style={[styles.tagText, { color: '#f7f3ec' }]}>{moodStyle.label}</Text>
+          </View>
+        )}
+        {topSymbols.map(sym => (
+          <View key={sym.id ?? sym.label} style={[styles.tag, styles.symbolTag]}>
+            <Text style={[styles.tagText, { color: '#f5d896' }]}>
+              ✦ {sym.label}
+            </Text>
+          </View>
+        ))}
+      </View>
+
+      {/* Actions */}
+      <TouchableOpacity onPress={onSave} activeOpacity={0.88} style={styles.saveBtn}>
+        <Text style={styles.saveBtnText}>Save to journal</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={onReRecord} activeOpacity={0.75} style={styles.reRecordBtn}>
+        <Text style={styles.reRecordBtnText}>Re-record</Text>
+      </TouchableOpacity>
     </Animated.View>
   );
 }
 
-const doneStyles = StyleSheet.create({
-  card: {
-    backgroundColor: COLORS.card,
-    borderRadius:    20,
-    padding:         22,
-    width:           '100%',
-    maxWidth:        340,
-    gap:             14,
-  },
-  cardTitle: {
-    fontSize:   22,
-    fontWeight: '500',
-    color:      COLORS.ink,
-    fontFamily: 'serif',
-  },
-  quoteWrap: {
-    flexDirection: 'row',
-    gap:           12,
-  },
-  quoteBorder: {
-    width:           3,
-    borderRadius:    2,
-    backgroundColor: COLORS.peach,
-    flexShrink:      0,
-  },
-  quoteText: {
-    flex:       1,
-    fontSize:   15,
-    color:      COLORS.ink2,
-    fontFamily: 'serif',
-    lineHeight: 24,
-  },
-  pillsRow: {
-    flexDirection: 'row',
-    flexWrap:      'wrap',
-    gap:           8,
-  },
-  moodPill: {
-    flexDirection:     'row',
-    alignItems:        'center',
-    borderRadius:      20,
-    paddingVertical:   4,
-    paddingHorizontal: 10,
-    gap:               6,
-  },
-  moodDot: {
-    width:        6,
-    height:       6,
-    borderRadius: 3,
-  },
-  symbolPill: {
-    borderRadius:      20,
-    paddingVertical:   4,
-    paddingHorizontal: 10,
-  },
-  pillText: {
-    fontSize:   13,
-    fontWeight: '500',
-  },
-  saveBtn: {
-    backgroundColor: COLORS.ink,
-    borderRadius:    999,
-    height:          48,
-    alignItems:      'center',
-    justifyContent:  'center',
-  },
-  saveBtnText: {
-    fontSize:   15,
-    fontWeight: '500',
-    color:      COLORS.bg2,
-  },
-  reRecordBtn: {
-    backgroundColor: COLORS.card,
-    borderRadius:    999,
-    height:          44,
-    alignItems:      'center',
-    justifyContent:  'center',
-    borderWidth:     1,
-    borderColor:     COLORS.line2,
-  },
-  reRecordBtnText: {
-    fontSize:   14,
-    fontWeight: '500',
-    color:      COLORS.ink,
-  },
-});
-
-// Shared phase layout styles
-const phaseStyles = StyleSheet.create({
-  centered: {
-    flex:           1,
-    alignItems:     'center',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-    gap:            16,
-  },
-  doneWrap: {
-    flex:              1,
-    alignItems:        'center',
-    justifyContent:    'center',
-    paddingHorizontal: 20,
-  },
-  headline: {
-    fontSize:   26,
-    fontWeight: '500',
-    color:      COLORS.ink,
-    fontFamily: 'serif',
-    textAlign:  'center',
-    lineHeight: 36,
-  },
-  sub: {
-    fontSize:  16,
-    color:     COLORS.ink2,
-    textAlign: 'center',
-    lineHeight: 26,
-  },
-  timer: {
-    fontSize:   22,
-    fontWeight: '600',
-    color:      COLORS.ink,
-    letterSpacing: 1,
-    fontVariant: ['tabular-nums'],
-  },
-  procSub: {
-    fontSize:  13,
-    color:     COLORS.ink3,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-});
-
-// =============================================================================
-// RecordDreamScreen
-// =============================================================================
+// ─── RecordDreamScreen ────────────────────────────────────────────────────────
 
 export default function RecordDreamScreen({ navigation }) {
-  const user            = useDreamStore((s) => s.user);
-  const addDream        = useDreamStore((s) => s.addDream);
-  const setCurrentDream = useDreamStore((s) => s.setCurrentDream);
+  const insets         = useSafeAreaInsets();
+  const user           = useDreamStore((s) => s.user);
+  const addDream       = useDreamStore((s) => s.addDream);
+  const setCurrentDream= useDreamStore((s) => s.setCurrentDream);
 
-  const {
-    isRecording,
-    audioUri,
-    duration,
-    startRecording,
-    stopRecording,
-    clearRecording,
-  } = useAudioRecorder();
+  const { isRecording, audioUri, duration, startRecording, stopRecording, clearRecording } =
+    useAudioRecorder();
+  const { transcript, analysis, isTranscribing, isAnalyzing, error: analysisError, analyzeAudio, reset: resetAnalysis } =
+    useDreamAnalysis();
 
-  const {
-    transcript,
-    analysis,
-    isTranscribing,
-    isAnalyzing,
-    error: analysisError,
-    analyzeAudio,
-    reset: resetAnalysis,
-  } = useDreamAnalysis();
-
-  const [phase,    setPhase]    = useState(PHASES.IDLE);
+  const [phase,     setPhase]     = useState(PHASES.IDLE);
   const [saveError, setSaveError] = useState(null);
+  const savedRef   = useRef(null);
+  const timerRef   = useRef(null);
 
-  const savedDreamRef      = useRef(null);
-  const autoNavigateTimer  = useRef(null);
-
-  // ── Cleanup ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    return () => {
-      if (autoNavigateTimer.current) clearTimeout(autoNavigateTimer.current);
-      resetAnalysis();
-    };
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    resetAnalysis();
   }, []);
 
-  // ── Watch for analysis completion → move to done ─────────────────────────
   useEffect(() => {
-    if (phase === PHASES.PROC && !isTranscribing && !isAnalyzing && (transcript || analysis)) {
+    if (phase !== PHASES.PROC) return;
+    if (isTranscribing || isAnalyzing) return;
+    // Advance to DONE whether AI succeeded or failed — let user save the raw audio
+    if (transcript || analysis || analysisError) {
       setPhase(PHASES.DONE);
     }
-  }, [phase, isTranscribing, isAnalyzing, transcript, analysis]);
+  }, [phase, isTranscribing, isAnalyzing, transcript, analysis, analysisError]);
 
-  // ── Hold start → begin recording ────────────────────────────────────────
   const handleHoldStart = useCallback(async () => {
     if (phase !== PHASES.IDLE) return;
     setSaveError(null);
@@ -643,42 +276,30 @@ export default function RecordDreamScreen({ navigation }) {
     setPhase(PHASES.REC);
   }, [phase, startRecording]);
 
-  // ── Hold end → stop recording + start analysis ───────────────────────────
   const handleHoldEnd = useCallback(async () => {
     if (phase !== PHASES.REC) return;
     const uri = await stopRecording();
-    if (!uri) {
-      setPhase(PHASES.IDLE);
-      return;
-    }
+    if (!uri) { setPhase(PHASES.IDLE); return; }
     setPhase(PHASES.PROC);
-    await analyzeAudio(uri);
+    const result = await analyzeAudio(uri);
+    // If analyzeAudio returns null without setting an error (e.g. aborted),
+    // fall through to DONE so the user can still save the raw audio.
+    if (!result) setPhase(PHASES.DONE);
   }, [phase, stopRecording, analyzeAudio]);
 
-  // ── Re-record ────────────────────────────────────────────────────────────
   const handleReRecord = useCallback(() => {
-    clearRecording();
-    resetAnalysis();
-    setSaveError(null);
-    setPhase(PHASES.IDLE);
+    clearRecording(); resetAnalysis(); setSaveError(null); setPhase(PHASES.IDLE);
   }, [clearRecording, resetAnalysis]);
 
-  // ── Save dream ───────────────────────────────────────────────────────────
   const handleSave = useCallback(async () => {
     if (!user?.id) return;
     setSaveError(null);
-
     try {
       let audioUrl = null;
       if (audioUri) {
-        try {
-          audioUrl = await uploadAudio(user.id, audioUri);
-        } catch (uploadErr) {
-          console.warn('[RecordDreamScreen] Audio upload failed:', uploadErr);
-        }
+        try { audioUrl = await uploadAudio(user.id, audioUri); } catch {}
       }
-
-      const dreamPayload = {
+      const dream = await saveDream({
         user_id:         user.id,
         transcript:      transcript ?? '',
         audio_url:       audioUrl,
@@ -687,218 +308,261 @@ export default function RecordDreamScreen({ navigation }) {
         vividness_score: analysis?.vividness_score ?? null,
         title:           analysis?.title ?? null,
         is_favourite:    false,
-      };
-
-      const newDream = await saveDream(dreamPayload);
-
-      if (analysis?.tags?.length > 0 && newDream?.id) {
+      });
+      if (analysis?.tags?.length > 0 && dream?.id) {
         try {
-          const tagsPayload = analysis.tags.map((tag) => ({
-            dream_id:         newDream.id,
-            type:             tag.type,
-            label:            tag.label,
-            confidence_score: tag.confidence_score ?? null,
-          }));
-          const savedTags = await saveTags(tagsPayload);
-          newDream.dream_tags = savedTags;
-        } catch (tagErr) {
-          console.warn('[RecordDreamScreen] Tag save failed:', tagErr);
-        }
+          const saved = await saveTags(analysis.tags.map(t => ({
+            dream_id: dream.id, type: t.type, label: t.label,
+            confidence_score: t.confidence_score ?? null,
+          })));
+          dream.dream_tags = saved;
+        } catch {}
       }
-
-      addDream(newDream);
-      setCurrentDream(newDream);
-      savedDreamRef.current = newDream;
-
-      // Navigate to DreamDetail after brief delay
-      autoNavigateTimer.current = setTimeout(() => {
-        if (savedDreamRef.current) {
-          navigation.replace('DreamDetail', { dreamId: savedDreamRef.current.id });
-        }
+      addDream(dream);
+      setCurrentDream(dream);
+      savedRef.current = dream;
+      timerRef.current = setTimeout(() => {
+        if (savedRef.current)
+          navigation.replace('DreamDetail', { dreamId: savedRef.current.id });
       }, 300);
     } catch (err) {
-      console.error('[RecordDreamScreen] Save failed:', err);
-      setSaveError(err?.message ?? 'Failed to save dream. Please try again.');
+      setSaveError(err?.message ?? 'Failed to save. Please try again.');
     }
-  }, [
-    user?.id,
-    audioUri,
-    transcript,
-    analysis,
-    addDream,
-    setCurrentDream,
-    navigation,
-  ]);
+  }, [user?.id, audioUri, transcript, analysis, addDream, setCurrentDream, navigation]);
 
-  // ── Close handler ─────────────────────────────────────────────────────────
   const handleClose = useCallback(async () => {
-    if (isRecording) {
-      await stopRecording();
-    }
-    clearRecording();
-    resetAnalysis();
+    if (isRecording) await stopRecording();
+    clearRecording(); resetAnalysis();
     navigation.goBack();
   }, [isRecording, stopRecording, clearRecording, resetAnalysis, navigation]);
 
-  // ── Phase label in header ─────────────────────────────────────────────────
+  const showMoon = phase === PHASES.IDLE || phase === PHASES.REC;
+
   const phaseLabel = {
-    [PHASES.IDLE]: 'Capture a dream',
-    [PHASES.REC]:  formatDuration(duration),
-    [PHASES.PROC]: 'Listening to your stars…',
-    [PHASES.DONE]: 'Your dream',
+    [PHASES.IDLE]: 'New dream',
+    [PHASES.REC]:  'Recording',
+    [PHASES.PROC]: 'Transcribing',
+    [PHASES.DONE]: 'Review',
   }[phase];
 
-  const showHoldButton = phase === PHASES.IDLE || phase === PHASES.REC;
-
-  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <View style={styles.root}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" />
 
-      {/* Background gradient */}
+      {/* Night sky background */}
       <LinearGradient
-        colors={['#fde8dc', '#f5e8d4', '#ece5d6']}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 0, y: 1 }}
+        colors={['#1c1733','#2a2350']}
+        start={{ x:0, y:0 }} end={{ x:0, y:1 }}
         style={StyleSheet.absoluteFill}
       />
+      <StarField />
 
-      <SafeAreaView style={styles.safeArea}>
-        {/* ── Header ── */}
-        <Animated.View entering={FadeIn.duration(350)} style={styles.header}>
-          {/* Close button */}
-          <TouchableOpacity
-            onPress={handleClose}
-            style={styles.closeBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-          >
-            <Text style={styles.closeBtnText}>×</Text>
-          </TouchableOpacity>
+      {/* Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        <TouchableOpacity onPress={handleClose} style={styles.closeBtn}>
+          <Text style={styles.closeBtnText}>✕</Text>
+        </TouchableOpacity>
+        <Text style={styles.phaseLabel}>{phaseLabel}</Text>
+        <View style={{ width: 36 }} />
+      </View>
 
-          {/* Phase label */}
-          <Text style={styles.phaseLabel}>{phaseLabel}</Text>
-
-          {/* Spacer */}
-          <View style={styles.headerSpacer} />
+      {/* ── IDLE ── */}
+      {phase === PHASES.IDLE && (
+        <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(200)} style={styles.centerArea}>
+          <Text style={styles.idleHeadline}>What did you dream?</Text>
+          <Text style={styles.idleSub}>Hold the moon and speak.{'\n'}We'll do the rest.</Text>
         </Animated.View>
+      )}
 
-        {/* ── Phase content ── */}
-        <View style={styles.phaseArea}>
-          {phase === PHASES.IDLE && <IdlePhase />}
-          {phase === PHASES.REC  && <RecPhase duration={duration} />}
-          {phase === PHASES.PROC && <ProcPhase />}
-          {phase === PHASES.DONE && (
-            <DonePhase
-              analysis={analysis}
-              transcript={transcript}
-              onSave={handleSave}
-              onReRecord={handleReRecord}
-            />
+      {/* ── RECORDING ── */}
+      {phase === PHASES.REC && (
+        <Animated.View entering={FadeIn.duration(250)} exiting={FadeOut.duration(200)} style={styles.centerArea}>
+          <Text style={styles.recTimer}>{fmt(duration)}</Text>
+          <Text style={styles.recSub}>Listening… release when finished</Text>
+          <Waveform duration={duration} />
+        </Animated.View>
+      )}
+
+      {/* ── TRANSCRIBING ── */}
+      {phase === PHASES.PROC && (
+        <Animated.View entering={FadeIn.duration(300)} exiting={FadeOut.duration(200)} style={styles.centerArea}>
+          <TranscribingCircle />
+          <Text style={styles.procTitle}>Transcribing…</Text>
+          <Text style={styles.procSub}>Cleaning filler words and tagging symbols</Text>
+        </Animated.View>
+      )}
+
+      {/* ── REVIEW ── */}
+      {phase === PHASES.DONE && (
+        <View style={styles.centerArea}>
+          <ReviewCard
+            analysis={analysis}
+            transcript={transcript}
+            aiUnavailable={!analysis && !transcript}
+            onSave={handleSave}
+            onReRecord={handleReRecord}
+          />
+          {saveError && (
+            <View style={styles.errorBanner}>
+              <Text style={styles.errorText}>{saveError}</Text>
+            </View>
           )}
         </View>
+      )}
 
-        {/* ── Save error ── */}
-        {saveError && (
-          <View style={styles.errorBanner}>
-            <Text style={styles.errorText}>{saveError}</Text>
-          </View>
-        )}
-
-        {/* ── Hold-to-record button ── */}
-        {showHoldButton && (
-          <View style={styles.holdWrap}>
-            <HoldButton
-              phase={phase}
-              onHoldStart={handleHoldStart}
-              onHoldEnd={handleHoldEnd}
-            />
-          </View>
-        )}
-      </SafeAreaView>
+      {/* ── Moon button ── */}
+      {showMoon && (
+        <View style={[styles.moonWrap, { paddingBottom: insets.bottom + 32 }]}>
+          <MoonButton
+            phase={phase}
+            onHoldStart={handleHoldStart}
+            onHoldEnd={handleHoldEnd}
+          />
+          {phase === PHASES.IDLE && (
+            <Text style={styles.holdLabel}>Hold to speak</Text>
+          )}
+        </View>
+      )}
     </View>
   );
 }
 
-// =============================================================================
-// Styles
-// =============================================================================
+// ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-  },
-  safeArea: {
-    flex: 1,
-  },
+  root: { flex: 1 },
 
-  // ── Header ──────────────────────────────────────────────────────────────────
+  // Header
   header: {
-    position:       'absolute',
-    top:            Platform.OS === 'ios' ? 56 : 32,
-    left:           0,
-    right:          0,
-    flexDirection:  'row',
-    alignItems:     'center',
+    position: 'absolute', top: 0, left: 0, right: 0,
+    flexDirection: 'row', alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    zIndex:         10,
+    paddingHorizontal: 20, zIndex: 10,
   },
   closeBtn: {
-    width:           36,
-    height:          36,
-    borderRadius:    18,
-    backgroundColor: 'rgba(255,255,255,0.60)',
-    alignItems:      'center',
-    justifyContent:  'center',
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    alignItems: 'center', justifyContent: 'center',
   },
-  closeBtnText: {
-    fontSize:   22,
-    color:      COLORS.ink,
-    fontWeight: '400',
-    lineHeight: 26,
-  },
+  closeBtnText: { fontSize: 16, color: '#f7f3ec', fontWeight: '400' },
   phaseLabel: {
-    fontSize:   15,
-    fontWeight: '500',
-    color:      COLORS.ink2,
-    textAlign:  'center',
-  },
-  headerSpacer: {
-    width: 36,
+    fontSize: 12, fontWeight: '600', color: 'rgba(247,243,236,0.55)',
+    letterSpacing: 0.06, textTransform: 'uppercase',
   },
 
-  // ── Phase area ───────────────────────────────────────────────────────────────
-  phaseArea: {
-    flex:              1,
-    paddingTop:        120, // clear the absolute header
-    paddingBottom:     180, // clear the hold button
+  // Content area
+  centerArea: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+    paddingTop: 80,
+    paddingBottom: 200,
+    gap: 16,
   },
 
-  // ── Hold button ──────────────────────────────────────────────────────────────
-  holdWrap: {
-    position:        'absolute',
-    bottom:          70,
-    left:            0,
-    right:           0,
-    alignItems:      'center',
+  // Idle
+  idleHeadline: {
+    fontFamily: 'Lora_500Medium', fontSize: 26,
+    color: '#f7f3ec', textAlign: 'center',
+    lineHeight: 34, marginBottom: 4,
+  },
+  idleSub: {
+    fontSize: 13, color: 'rgba(247,243,236,0.55)',
+    textAlign: 'center', lineHeight: 20,
   },
 
-  // ── Error banner ─────────────────────────────────────────────────────────────
+  // Recording
+  recTimer: {
+    fontFamily: 'Lora_500Medium', fontSize: 56,
+    color: '#f5d896', letterSpacing: -0.02,
+    fontVariant: ['tabular-nums'],
+  },
+  recSub: {
+    fontSize: 13, color: 'rgba(247,243,236,0.65)', marginBottom: 20,
+  },
+  waveform: {
+    flexDirection: 'row', alignItems: 'center',
+    gap: 4, height: 60,
+  },
+  waveBar: {
+    width: 3, borderRadius: 2,
+    backgroundColor: '#f5d896',
+    opacity: 0.75,
+  },
+
+  // Transcribing
+  transcribeCircle: { marginBottom: 8 },
+  transcribeCircleGrad: { width: 80, height: 80, borderRadius: 40 },
+  procTitle: {
+    fontFamily: 'Lora_500Medium', fontSize: 22,
+    color: '#f7f3ec', marginBottom: 4,
+  },
+  procSub: {
+    fontSize: 13, color: 'rgba(247,243,236,0.55)', textAlign: 'center',
+  },
+
+  // Review
+  reviewWrap: { width: '100%', maxWidth: 340, alignItems: 'stretch' },
+  reviewTitle: {
+    fontFamily: 'Lora_500Medium', fontSize: 22,
+    color: '#f7f3ec', marginBottom: 14,
+  },
+  reviewCard: {
+    backgroundColor: 'rgba(255,255,255,0.06)',
+    borderWidth: 0.5, borderColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 18, padding: 16, marginBottom: 16,
+  },
+  reviewText: {
+    fontSize: 14, lineHeight: 22,
+    color: 'rgba(247,243,236,0.85)',
+    fontFamily: 'Lora_400Regular',
+  },
+  reviewTags: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 22 },
+  tag: {
+    flexDirection: 'row', alignItems: 'center',
+    borderRadius: 999, paddingVertical: 4, paddingHorizontal: 10, gap: 5,
+  },
+  moodTag:   { backgroundColor: 'rgba(185,168,228,0.2)' },
+  symbolTag: { backgroundColor: 'rgba(245,216,150,0.15)' },
+  tagDot:    { width: 5, height: 5, borderRadius: 3 },
+  tagText:   { fontSize: 11, fontWeight: '500' },
+
+  saveBtn: {
+    height: 50, borderRadius: 25,
+    backgroundColor: '#f5d896',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 10,
+  },
+  saveBtnText: { fontSize: 15, fontWeight: '600', color: '#1c1733' },
+  reRecordBtn: {
+    height: 44, borderRadius: 22,
+    backgroundColor: 'transparent',
+    alignItems: 'center', justifyContent: 'center',
+  },
+  reRecordBtnText: { fontSize: 13, color: 'rgba(247,243,236,0.6)' },
+
+  // Moon button
+  moonWrap: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    alignItems: 'center', gap: 12,
+  },
+  moonBtn: {
+    width: 110, height: 110, borderRadius: 55,
+    overflow: 'hidden',
+    shadowOffset: { width: 0, height: 8 },
+    elevation: 12,
+  },
+
+  holdLabel: {
+    fontSize: 11, color: 'rgba(247,243,236,0.4)',
+    letterSpacing: 0.06, textTransform: 'uppercase',
+  },
+
+  // Error
   errorBanner: {
-    position:          'absolute',
-    bottom:            180,
-    left:              20,
-    right:             20,
-    backgroundColor:   '#fde8dc',
-    borderRadius:      12,
-    padding:           12,
-    borderWidth:       1,
-    borderColor:       COLORS.peach,
+    marginTop: 12, padding: 10, borderRadius: 12,
+    backgroundColor: 'rgba(255,100,100,0.15)',
+    borderWidth: 0.5, borderColor: 'rgba(255,100,100,0.3)',
   },
-  errorText: {
-    fontSize:  13,
-    color:     COLORS.ink2,
-    textAlign: 'center',
-  },
+  errorText: { fontSize: 12, color: '#ffaaaa', textAlign: 'center' },
 });

@@ -4,6 +4,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '../../constants/theme';
 
 const TECHNIQUES = [
@@ -99,29 +100,47 @@ export default function LucidTrainerScreen() {
           })}
         </View>
 
-        {/* REM window */}
+        {/* REM window — dark night gradient bar */}
         <View style={styles.card}>
           <Text style={styles.sectionLabel}>TONIGHT'S REM WINDOW</Text>
+          <Text style={styles.cardSub}>Based on your last 14 dreams, REM peaks here.</Text>
           <View style={styles.remBar}>
-            <View style={styles.remPeak} />
-            <Text style={styles.remPeakLabel}>REM PEAK</Text>
+            <LinearGradient
+              colors={['#1c1733', '#4b3e94', '#1c1733']}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
+              style={StyleSheet.absoluteFill}
+            />
+            {/* REM peak band */}
+            <View style={styles.remPeak}>
+              <LinearGradient
+                colors={['rgba(245,216,150,0.5)', 'rgba(245,216,150,0.15)']}
+                start={{ x: 0, y: 0 }} end={{ x: 0, y: 1 }}
+                style={StyleSheet.absoluteFill}
+              />
+            </View>
+            <Text style={styles.remPeakLabel}>REM peak</Text>
             <Text style={styles.remPeakTime}>4:18 AM</Text>
-            <Text style={styles.remStart}>23:00</Text>
-            <Text style={styles.remEnd}>07:00</Text>
+            <Text style={styles.remStart}>11pm</Text>
+            <Text style={styles.remEnd}>7am</Text>
           </View>
-          <View style={{ height: 16 }} />
+          <View style={{ height: 14 }} />
           <TouchableOpacity style={styles.alarmBtn}>
-            <Text style={styles.alarmBtnText}>Set wake alarm · 4:00 AM</Text>
+            <Text style={styles.alarmBtnText}>Set wake-back-to-bed alarm · 4:00 AM</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Tonight's intention */}
+        {/* Tonight's intention — dark card with gold serif text */}
         <View style={styles.intentionCard}>
+          <LinearGradient
+            colors={['#2a2350', '#4b3e94']}
+            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+            style={StyleSheet.absoluteFill}
+          />
           <Text style={styles.intentionLabel}>TONIGHT'S INTENTION</Text>
           <Text style={styles.intentionText}>
             "Tonight, I will recognize{'\n'}that I am dreaming."
           </Text>
-          <Text style={styles.intentionSub}>Whisper 5× before sleep</Text>
+          <Text style={styles.intentionSub}>Whisper this 5× before sleep</Text>
         </View>
       </ScrollView>
     </View>
@@ -187,41 +206,47 @@ const styles = StyleSheet.create({
   radioDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff' },
   techName: { fontFamily: 'Lora_500Medium', fontSize: 17, fontWeight: '500', color: COLORS.ink },
   techSub: { fontSize: 12, color: COLORS.ink3, marginTop: 2 },
+  cardSub: { fontSize: 12, color: COLORS.ink3, marginBottom: 14 },
   remBar: {
-    height: 56, borderRadius: 12, overflow: 'hidden',
-    backgroundColor: COLORS.sky2, position: 'relative',
+    height: 56, borderRadius: 12, overflow: 'hidden', position: 'relative',
   },
   remPeak: {
     position: 'absolute', left: '58%', width: '18%', top: 0, bottom: 0,
-    backgroundColor: 'rgba(244,165,133,0.4)',
-    borderLeftWidth: 2, borderRightWidth: 2, borderColor: COLORS.peach,
+    overflow: 'hidden',
+    borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#f5d896',
   },
   remPeakLabel: {
-    position: 'absolute', left: '59%', top: 6,
-    fontSize: 10, fontWeight: '600', color: COLORS.ink,
+    position: 'absolute', left: '60%', top: 6,
+    fontSize: 9, fontWeight: '600', color: '#f5d896',
   },
   remPeakTime: {
     position: 'absolute', left: '60%', bottom: 6,
-    fontFamily: 'Lora_500Medium', fontSize: 13, fontWeight: '500', color: COLORS.ink,
+    fontFamily: 'Lora_500Medium', fontSize: 12, fontWeight: '500', color: '#f5d896',
   },
-  remStart: { position: 'absolute', left: 8, bottom: 6, fontSize: 10, color: COLORS.ink2 },
-  remEnd: { position: 'absolute', right: 8, bottom: 6, fontSize: 10, color: COLORS.ink2 },
+  remStart: {
+    position: 'absolute', left: 8, bottom: 6,
+    fontSize: 9, color: 'rgba(247,243,236,0.5)',
+  },
+  remEnd: {
+    position: 'absolute', right: 8, bottom: 6,
+    fontSize: 9, color: 'rgba(247,243,236,0.5)',
+  },
   alarmBtn: {
     height: 52, borderRadius: 26, backgroundColor: COLORS.ink,
     alignItems: 'center', justifyContent: 'center',
   },
-  alarmBtnText: { fontSize: 15, fontWeight: '600', color: COLORS.bg2 },
+  alarmBtnText: { fontSize: 14, fontWeight: '600', color: '#f5d896' },
   intentionCard: {
-    padding: 24, borderRadius: 20, alignItems: 'center',
-    backgroundColor: COLORS.plum2,
+    padding: 22, borderRadius: 20, alignItems: 'center',
+    overflow: 'hidden', position: 'relative', marginBottom: 14,
   },
   intentionLabel: {
-    fontSize: 12, fontWeight: '600', color: COLORS.ink2,
-    letterSpacing: 1, textTransform: 'uppercase', marginBottom: 12,
+    fontSize: 11, fontWeight: '600', color: 'rgba(247,243,236,0.55)',
+    letterSpacing: 0.8, textTransform: 'uppercase', marginBottom: 12,
   },
   intentionText: {
-    fontFamily: 'Lora_500Medium', fontSize: 22, lineHeight: 30,
-    color: COLORS.ink, textAlign: 'center', marginBottom: 14,
+    fontFamily: 'Lora_500Medium', fontSize: 18, lineHeight: 26,
+    color: '#f5d896', textAlign: 'center', marginBottom: 10,
   },
-  intentionSub: { fontSize: 12, color: COLORS.ink3 },
+  intentionSub: { fontSize: 11.5, color: 'rgba(247,243,236,0.5)' },
 });
