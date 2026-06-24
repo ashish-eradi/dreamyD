@@ -1,17 +1,72 @@
+# Dependencies
 node_modules/
+.pnp/
+.pnp.js
+
+# Expo
 .expo/
 dist/
 web-build/
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-*.orig.*
-web-build/
+expo-env.d.ts
+
+# Build outputs
+android/app/build/
+android/build/
+ios/build/
+*.apk
+*.aab
+*.ipa
+
+# Environment & secrets
 .env
 .env.local
-.DS_Store
+.env.*.local
+.env.production
+
+# Android signing & keystores
+*.jks
+*.keystore
+android/app/debug.keystore
+android/app/release.keystore
+
+# iOS signing
+*.p8
+*.p12
+*.mobileprovision
+*.cer
+*.certSigningRequest
+
+# Keys
+*.key
+*.pem
+
+# Logs
+*.log
 npm-debug.*
 yarn-debug.*
 yarn-error.*
+hs_err_pid*.log
+replay_pid*.log
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# IDEs
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Misc
+*.orig.*
+.mcp.json
