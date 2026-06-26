@@ -32,6 +32,7 @@ import {
 } from '@expo-google-fonts/lora';
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase, onAuthStateChange, getProfile, updateProfile } from './src/services/supabase';
 
 // ── Notifications ─────────────────────────────────────────────────────────────
@@ -126,6 +127,10 @@ export default function App() {
       // or:             dreamdiary://auth/reset?code=...
       const parsed = new URL(url);
 
+      // Only handle known auth paths — prevents unrelated deep links from
+      // accidentally triggering exchangeCodeForSession
+      if (parsed.hostname !== 'auth') return;
+
       // PKCE flow — code param
       const code = parsed.searchParams.get('code');
       if (code) {
@@ -201,7 +206,12 @@ export default function App() {
 
         if (initialSession) {
           setSession(initialSession);
-          await hydrateProfile(initialSession.user.id);
+          const pendingReset = await AsyncStorage.getItem('@dreamdiary/needsPasswordReset').catch(() => null);
+          if (pendingReset === 'true') {
+            setNeedsPasswordReset(true);
+          } else {
+            await hydrateProfile(initialSession.user.id);
+          }
         }
       } catch (err) {
         console.error('[App] Session bootstrap failed:', err);
@@ -222,15 +232,19 @@ export default function App() {
         // User clicked a reset link — they're authenticated but need to set a new password
         setSession(newSession);
         setNeedsPasswordReset(true);
+        AsyncStorage.setItem('@dreamdiary/needsPasswordReset', 'true').catch(() => {});
         setIsLoading(false);
       } else if (event === 'SIGNED_OUT') {
         storeSignOut();
+        AsyncStorage.removeItem('@dreamdiary/needsPasswordReset').catch(() => {});
         setIsLoading(false);
       } else if (event === 'TOKEN_REFRESHED' && newSession) {
         setSession(newSession);
       } else if (event === 'USER_UPDATED' && newSession) {
         setUser(newSession.user);
         setNeedsPasswordReset(false);
+        AsyncStorage.removeItem('@dreamdiary/needsPasswordReset').catch(() => {});
+        await hydrateProfile(newSession.user.id);
       }
     });
 

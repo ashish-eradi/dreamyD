@@ -61,6 +61,11 @@ export default function DreamDetailScreen() {
 
   const swipeRef = useRef(null);
   const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const favPendingRef = useRef(false);
+
+  // Must be declared before the useEffects that reference it in their dep arrays
+  const curDream = dream || dreams[curIdx];
 
   const loadDream = useCallback(async (id) => {
     setLoading(true);
@@ -110,7 +115,7 @@ export default function DreamDetailScreen() {
           }
           if (status.didJustFinish) {
             setPlayPos(0);
-            sound.setPositionAsync(0);
+            sound.setPositionAsync(0).catch(() => {});
           }
         });
       } catch (e) {
@@ -138,24 +143,28 @@ export default function DreamDetailScreen() {
     };
   }, [curDream?.audio_url]);
 
-  const curDream = dream || dreams[curIdx];
-
   const handleFav = async () => {
-    if (!curDream?.id) return;
+    if (!curDream?.id || favPendingRef.current) return;
+    favPendingRef.current = true;
     const newVal = !fav;
     setFav(newVal);
     try {
       await updateDreamInDB(curDream.id, { is_favourite: newVal });
       storeUpdateDream(curDream.id, { is_favourite: newVal });
     } catch { setFav(!newVal); }
+    finally { favPendingRef.current = false; }
   };
 
   const togglePlay = async () => {
     if (!soundRef.current || !soundReady) return;
-    if (isPlaying) {
-      await soundRef.current.pauseAsync();
-    } else {
-      await soundRef.current.playAsync();
+    try {
+      if (isPlaying) {
+        await soundRef.current.pauseAsync();
+      } else {
+        await soundRef.current.playAsync();
+      }
+    } catch (e) {
+      console.warn('[DreamDetail] togglePlay failed:', e);
     }
   };
 
@@ -231,11 +240,17 @@ export default function DreamDetailScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
-        onTouchStart={e => { touchStartX.current = e.nativeEvent.pageX; }}
+        onTouchStart={e => {
+          touchStartX.current = e.nativeEvent.pageX;
+          touchStartY.current = e.nativeEvent.pageY;
+        }}
         onTouchEnd={e => {
           if (touchStartX.current != null) {
-            handleSwipe(e.nativeEvent.pageX - touchStartX.current);
+            const dx = e.nativeEvent.pageX - touchStartX.current;
+            const dy = e.nativeEvent.pageY - touchStartY.current;
+            if (Math.abs(dx) > Math.abs(dy)) handleSwipe(dx);
             touchStartX.current = null;
+            touchStartY.current = null;
           }
         }}
       >

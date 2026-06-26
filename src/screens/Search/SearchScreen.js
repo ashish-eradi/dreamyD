@@ -52,6 +52,8 @@ function DreamRow({ dream, onPress }) {
   );
 }
 
+const Separator = () => <View style={styles.separator} />;
+
 // ─── SearchScreen ─────────────────────────────────────────────────────────────
 
 export default function SearchScreen() {
@@ -147,6 +149,7 @@ export default function SearchScreen() {
 
       {/* Results */}
       <FlatList
+        style={styles.list}
         data={filtered}
         keyExtractor={item => item.id}
         contentContainerStyle={[
@@ -160,16 +163,16 @@ export default function SearchScreen() {
           <View style={styles.empty}>
             <Text style={styles.emptyGlyph}>◎</Text>
             <Text style={styles.emptyTitle}>
-              {query || activeEmotion ? 'No dreams match' : 'No dreams yet'}
+              {query.trim() || activeEmotion ? 'No dreams match' : 'No dreams yet'}
             </Text>
             <Text style={styles.emptySub}>
-              {query || activeEmotion
+              {query.trim() || activeEmotion
                 ? 'Try a different word or clear the filters above'
                 : 'Record your first dream to start searching'}
             </Text>
           </View>
         }
-        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        ItemSeparatorComponent={Separator}
       />
 
       {/* Result count */}
@@ -214,6 +217,7 @@ const styles = StyleSheet.create({
   },
   filterChipText: { fontSize: 12.5, fontWeight: '600' },
 
+  list: { flex: 1 },
   listContent: { paddingHorizontal: 16, paddingTop: 8 },
   dreamRow: {
     backgroundColor: COLORS.card,

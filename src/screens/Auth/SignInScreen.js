@@ -1,13 +1,14 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar,
-  KeyboardAvoidingView, ScrollView, ActivityIndicator, Platform, Linking, Alert,
+  KeyboardAvoidingView, ScrollView, ActivityIndicator, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { signInWithEmail, signInWithGoogle } from '../../services/supabase';
+import { signInWithEmail } from '../../services/supabase';
 import { useDreamStore } from '../../store';
 import { friendlySignInError } from '../../utils';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 import { COLORS } from '../../constants/theme';
 
 export default function SignInScreen() {
@@ -17,22 +18,9 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState(null);
   const passwordRef = useRef(null);
-
-  const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    setError(null);
-    try {
-      const data = await signInWithGoogle();
-      if (data?.url) await Linking.openURL(data.url);
-    } catch (err) {
-      Alert.alert('Google sign in failed', err?.message || 'Please try again.');
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
+  const { handleGoogleSignIn, googleLoading } = useGoogleAuth();
 
   const handleSignIn = async () => {
     setError(null);

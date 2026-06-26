@@ -1,14 +1,15 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar,
-  KeyboardAvoidingView, ScrollView, ActivityIndicator, Platform, Linking, Alert,
+  KeyboardAvoidingView, ScrollView, ActivityIndicator, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { signUpWithEmail, updateProfile, signInWithGoogle } from '../../services/supabase';
+import { signUpWithEmail, updateProfile } from '../../services/supabase';
 import { formatWakeTimeTo24h, friendlySignUpError } from '../../utils';
 import { COLORS } from '../../constants/theme';
 import { useDreamStore } from '../../store';
+import { useGoogleAuth } from '../../hooks/useGoogleAuth';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -21,24 +22,11 @@ export default function SignUpScreen() {
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState(null);
   const [confirmSent, setConfirmSent] = useState(false);
   const emailRef = useRef(null);
   const passwordRef = useRef(null);
-
-  const handleGoogleSignIn = async () => {
-    setGoogleLoading(true);
-    setError(null);
-    try {
-      const data = await signInWithGoogle();
-      if (data?.url) await Linking.openURL(data.url);
-    } catch (err) {
-      Alert.alert('Google sign in failed', err?.message || 'Please try again.');
-    } finally {
-      setGoogleLoading(false);
-    }
-  };
+  const { handleGoogleSignIn, googleLoading } = useGoogleAuth();
 
   const wakeTime = route.params?.wakeTime ?? null;
 
