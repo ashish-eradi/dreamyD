@@ -386,22 +386,32 @@ export default function HomeScreen({ navigation }) {
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* ── Header: brand mark + user avatar ── */}
+          {/* ── Header: brand mark + search + user avatar ── */}
           <Animated.View entering={FadeIn.duration(300)} style={styles.header}>
             <View style={styles.headerBrand}>
               <BrandMoon size={22} />
               <Text style={styles.headerBrandName}>DreamDiary</Text>
             </View>
-            <TouchableOpacity
-              onPress={handleSettings}
-              style={styles.avatarBtn}
-              accessibilityRole="button"
-              accessibilityLabel="Open settings"
-            >
-              <Text style={styles.avatarText}>
-                {firstName.charAt(0).toUpperCase()}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.headerRight}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('Search')}
+                style={styles.iconBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Search dreams"
+              >
+                <Text style={styles.iconBtnText}>⌕</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                onPress={handleSettings}
+                style={styles.avatarBtn}
+                accessibilityRole="button"
+                accessibilityLabel="Open settings"
+              >
+                <Text style={styles.avatarText}>
+                  {firstName.charAt(0).toUpperCase()}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </Animated.View>
 
           {/* ── Date + greeting ── */}
@@ -467,6 +477,13 @@ const styles = StyleSheet.create({
     fontFamily: 'Lora_500Medium', fontSize: 17, fontWeight: '500',
     color: COLORS.ink, letterSpacing: -0.2,
   },
+  headerRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  iconBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.line,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  iconBtnText: { fontSize: 18, color: COLORS.ink2 },
   avatarBtn: {
     width: 36, height: 36, borderRadius: 18,
     backgroundColor: COLORS.peach2,

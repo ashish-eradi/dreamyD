@@ -1,11 +1,11 @@
 import React, { useState, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet, StatusBar,
-  KeyboardAvoidingView, ScrollView, ActivityIndicator, Platform,
+  KeyboardAvoidingView, ScrollView, ActivityIndicator, Platform, Linking, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { signInWithEmail } from '../../services/supabase';
+import { signInWithEmail, signInWithGoogle } from '../../services/supabase';
 import { useDreamStore } from '../../store';
 import { friendlySignInError } from '../../utils';
 import { COLORS } from '../../constants/theme';
@@ -17,8 +17,22 @@ export default function SignInScreen() {
   const [password, setPassword] = useState('');
   const [passwordVisible, setPasswordVisible] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [googleLoading, setGoogleLoading] = useState(false);
   const [error, setError] = useState(null);
   const passwordRef = useRef(null);
+
+  const handleGoogleSignIn = async () => {
+    setGoogleLoading(true);
+    setError(null);
+    try {
+      const data = await signInWithGoogle();
+      if (data?.url) await Linking.openURL(data.url);
+    } catch (err) {
+      Alert.alert('Google sign in failed', err?.message || 'Please try again.');
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
 
   const handleSignIn = async () => {
     setError(null);
@@ -110,6 +124,27 @@ export default function SignInScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Google Sign-In */}
+          <View style={styles.dividerRow}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>or</Text>
+            <View style={styles.dividerLine} />
+          </View>
+          <TouchableOpacity
+            style={styles.googleBtn}
+            onPress={handleGoogleSignIn}
+            disabled={googleLoading}
+            activeOpacity={0.85}
+          >
+            {googleLoading
+              ? <ActivityIndicator color={COLORS.ink} />
+              : <>
+                  <Text style={styles.googleBtnIcon}>G</Text>
+                  <Text style={styles.googleBtnText}>Continue with Google</Text>
+                </>
+            }
+          </TouchableOpacity>
+
           <View style={styles.footer}>
             <Text style={styles.footerHint}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('SignUp')}>
@@ -166,6 +201,16 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center', marginTop: 4,
   },
   ctaBtnText: { fontSize: 16, fontWeight: '600', color: COLORS.bg2 },
+  dividerRow: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 24, marginTop: 20, gap: 10 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: COLORS.line2 },
+  dividerText: { fontSize: 13, color: COLORS.ink3 },
+  googleBtn: {
+    marginHorizontal: 24, marginTop: 12, height: 52, borderRadius: 26,
+    backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.line2,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+  },
+  googleBtnIcon: { fontSize: 16, fontWeight: '700', color: '#4285F4' },
+  googleBtnText: { fontSize: 15, fontWeight: '500', color: COLORS.ink },
   footer: { flexDirection: 'row', justifyContent: 'center', marginTop: 24 },
   footerHint: { fontSize: 15, color: COLORS.ink2 },
   footerLink: { fontSize: 15, color: COLORS.ink, fontWeight: '600' },

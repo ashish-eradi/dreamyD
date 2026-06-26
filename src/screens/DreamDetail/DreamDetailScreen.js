@@ -1,12 +1,17 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity, StyleSheet,
-  StatusBar, Alert, Share, PanResponder, Dimensions,
+  StatusBar, Alert, Dimensions,
 } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { Audio } from 'expo-av';
 import { useDreamStore } from '../../store';
-import { getDreamById, deleteDream as deleteDreamFromDB } from '../../services/supabase';
+import {
+  getDreamById,
+  deleteDream as deleteDreamFromDB,
+  updateDream as updateDreamInDB,
+} from '../../services/supabase';
 import { COLORS, MOODS, SYMBOLS } from '../../constants/theme';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -36,7 +41,7 @@ export default function DreamDetailScreen() {
   const insets = useSafeAreaInsets();
   const { dreamId } = route.params || {};
 
-  const { dreams: storeDreams, removeDream } = useDreamStore();
+  const { dreams: storeDreams, removeDream, updateDream: storeUpdateDream } = useDreamStore();
   const dreams = storeDreams || [];
 
   const [curIdx, setCurIdx] = useState(() => {
@@ -48,6 +53,12 @@ export default function DreamDetailScreen() {
   const [loading, setLoading] = useState(true);
   const [fav, setFav] = useState(false);
 
+  // ── Audio playback ──────────────────────────────────────────────────────────
+  const soundRef   = useRef(null);
+  const [isPlaying,  setIsPlaying]  = useState(false);
+  const [playPos,    setPlayPos]    = useState(0);   // 0–1
+  const [soundReady, setSoundReady] = useState(false);
+
   const swipeRef = useRef(null);
   const touchStartX = useRef(null);
 
@@ -56,8 +67,8 @@ export default function DreamDetailScreen() {
     try {
       const data = await getDreamById(id);
       if (data) {
-        setDream(data.dream || data);
-        setTags(data.tags || []);
+        setDream(data);
+        setTags(data.dream_tags || []);
       }
     } catch {
       const fallback = dreams[curIdx];
@@ -75,7 +86,78 @@ export default function DreamDetailScreen() {
     if (targetId) loadDream(targetId);
   }, [curIdx]);
 
+  // Sync fav toggle when the dream we're viewing changes
+  useEffect(() => {
+    setFav(curDream?.is_favourite ?? false);
+  }, [curDream?.id]);
+
+  // Load/unload audio when the dream's audio_url changes
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadSound(url) {
+      try {
+        await Audio.setAudioModeAsync({ playsInSilentModeIOS: true });
+        const { sound } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: false });
+        if (cancelled) { sound.unloadAsync(); return; }
+        soundRef.current = sound;
+        setSoundReady(true);
+        sound.setOnPlaybackStatusUpdate(status => {
+          if (!status.isLoaded) return;
+          setIsPlaying(status.isPlaying ?? false);
+          if (status.durationMillis) {
+            setPlayPos(status.positionMillis / status.durationMillis);
+          }
+          if (status.didJustFinish) {
+            setPlayPos(0);
+            sound.setPositionAsync(0);
+          }
+        });
+      } catch (e) {
+        if (!cancelled) console.warn('[DreamDetail] audio load failed:', e);
+      }
+    }
+
+    if (soundRef.current) {
+      soundRef.current.unloadAsync().catch(() => {});
+      soundRef.current = null;
+    }
+    setSoundReady(false);
+    setIsPlaying(false);
+    setPlayPos(0);
+
+    const audioUrl = curDream?.audio_url;
+    if (audioUrl) loadSound(audioUrl);
+
+    return () => {
+      cancelled = true;
+      if (soundRef.current) {
+        soundRef.current.unloadAsync().catch(() => {});
+        soundRef.current = null;
+      }
+    };
+  }, [curDream?.audio_url]);
+
   const curDream = dream || dreams[curIdx];
+
+  const handleFav = async () => {
+    if (!curDream?.id) return;
+    const newVal = !fav;
+    setFav(newVal);
+    try {
+      await updateDreamInDB(curDream.id, { is_favourite: newVal });
+      storeUpdateDream(curDream.id, { is_favourite: newVal });
+    } catch { setFav(!newVal); }
+  };
+
+  const togglePlay = async () => {
+    if (!soundRef.current || !soundReady) return;
+    if (isPlaying) {
+      await soundRef.current.pauseAsync();
+    } else {
+      await soundRef.current.playAsync();
+    }
+  };
 
   const handleDelete = () => {
     Alert.alert('Delete dream?', 'This cannot be undone.', [
@@ -134,7 +216,7 @@ export default function DreamDetailScreen() {
         </TouchableOpacity>
         <Text style={styles.headerCount}>{curIdx + 1} of {dreams.length}</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.circleBtn} onPress={() => setFav(v => !v)}>
+          <TouchableOpacity style={styles.circleBtn} onPress={handleFav}>
             <Text style={[styles.circleBtnText, { color: fav ? COLORS.peach : COLORS.ink2 }]}>
               {fav ? '♥' : '♡'}
             </Text>
@@ -173,6 +255,23 @@ export default function DreamDetailScreen() {
           <MoodPill mood={mood} />
           {symbolNames.slice(0, 4).map(s => <SymbolTag key={s} name={s} />)}
         </View>
+
+        {/* Audio player */}
+        {curDream?.audio_url && (
+          <View style={styles.audioPlayer}>
+            <TouchableOpacity
+              style={[styles.playBtn, !soundReady && styles.playBtnDisabled]}
+              onPress={togglePlay}
+              disabled={!soundReady}
+            >
+              <Text style={styles.playBtnIcon}>{isPlaying ? '⏸' : '▶'}</Text>
+            </TouchableOpacity>
+            <View style={styles.progressTrack}>
+              <View style={[styles.progressFill, { width: `${Math.round(playPos * 100)}%` }]} />
+            </View>
+            <Text style={styles.audioLabel}>Recording</Text>
+          </View>
+        )}
 
         {/* Body */}
         <View style={styles.bodyBlock}>
@@ -282,4 +381,24 @@ const styles = StyleSheet.create({
   },
   deleteBtn: { alignItems: 'center', paddingVertical: 16 },
   deleteBtnText: { fontSize: 14, color: COLORS.ink3 },
+
+  audioPlayer: {
+    flexDirection: 'row', alignItems: 'center', gap: 10,
+    backgroundColor: COLORS.card, borderRadius: 14,
+    borderWidth: 1, borderColor: COLORS.line,
+    padding: 12, marginBottom: 20,
+  },
+  playBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: COLORS.ink,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  playBtnDisabled: { opacity: 0.35 },
+  playBtnIcon: { fontSize: 13, color: '#fff' },
+  progressTrack: {
+    flex: 1, height: 4, borderRadius: 2,
+    backgroundColor: COLORS.line2, overflow: 'hidden',
+  },
+  progressFill: { height: '100%', backgroundColor: COLORS.ink, borderRadius: 2 },
+  audioLabel: { fontSize: 11, color: COLORS.ink3 },
 });

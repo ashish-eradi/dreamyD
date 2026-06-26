@@ -15,7 +15,8 @@ import WakeTimePickerScreen from '../screens/Onboarding/WakeTimePicker';
 import NotificationPermissionScreen from '../screens/Onboarding/NotificationPermission';
 
 // Auth
-import { SignUpScreen, SignInScreen, ForgotPasswordScreen } from '../screens/Auth';
+import { SignUpScreen, SignInScreen, ForgotPasswordScreen, SetNewPasswordScreen } from '../screens/Auth';
+import SearchScreen from '../screens/Search/SearchScreen';
 
 // Main tabs
 import HomeScreen from '../screens/Home';
@@ -186,10 +187,15 @@ function OnboardingNavigator() {
 
 // ─── Root navigator ──────────────────────────────────────────────────────────
 function RootNavigator() {
-  const user = useStore(s => s.user);
+  const user               = useStore(s => s.user);
+  const needsPasswordReset = useStore(s => s.needsPasswordReset);
 
   if (!user?.id) {
     return <OnboardingNavigator />;
+  }
+
+  if (needsPasswordReset) {
+    return <SetNewPasswordScreen />;
   }
 
   return (
@@ -203,6 +209,7 @@ function RootNavigator() {
       <RootStack.Screen name="Paywall" component={PaywallScreen} options={{ presentation: 'modal' }} />
       <RootStack.Screen name="ProfileEdit" component={ProfileEditScreen} options={{ presentation: 'modal' }} />
       <RootStack.Screen name="Notifications" component={NotificationsScreen} options={{ presentation: 'modal' }} />
+      <RootStack.Screen name="Search" component={SearchScreen} options={{ presentation: 'modal' }} />
     </RootStack.Navigator>
   );
 }

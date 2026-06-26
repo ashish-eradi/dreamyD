@@ -96,12 +96,13 @@ export default function App() {
   });
 
   // ── Store actions ─────────────────────────────────────────────────────────
-  const setSession        = useDreamStore((s) => s.setSession);
-  const setUser           = useDreamStore((s) => s.setUser);
-  const setIsLoading      = useDreamStore((s) => s.setIsLoading);
-  const setIsPremium      = useDreamStore((s) => s.setIsPremium);
-  const setOnboardingDone = useDreamStore((s) => s.setOnboardingDone);
-  const storeSignOut      = useDreamStore((s) => s.signOut);
+  const setSession             = useDreamStore((s) => s.setSession);
+  const setUser                = useDreamStore((s) => s.setUser);
+  const setIsLoading           = useDreamStore((s) => s.setIsLoading);
+  const setIsPremium           = useDreamStore((s) => s.setIsPremium);
+  const setOnboardingDone      = useDreamStore((s) => s.setOnboardingDone);
+  const setNeedsPasswordReset  = useDreamStore((s) => s.setNeedsPasswordReset);
+  const storeSignOut           = useDreamStore((s) => s.signOut);
 
   // ── Store state ───────────────────────────────────────────────────────────
   const isLoading = useDreamStore(selectIsLoading);
@@ -217,6 +218,11 @@ export default function App() {
         setSession(newSession);
         await hydrateProfile(newSession.user.id);
         setIsLoading(false);
+      } else if (event === 'PASSWORD_RECOVERY' && newSession) {
+        // User clicked a reset link — they're authenticated but need to set a new password
+        setSession(newSession);
+        setNeedsPasswordReset(true);
+        setIsLoading(false);
       } else if (event === 'SIGNED_OUT') {
         storeSignOut();
         setIsLoading(false);
@@ -224,6 +230,7 @@ export default function App() {
         setSession(newSession);
       } else if (event === 'USER_UPDATED' && newSession) {
         setUser(newSession.user);
+        setNeedsPasswordReset(false);
       }
     });
 
