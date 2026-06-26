@@ -6,6 +6,47 @@
 // =============================================================================
 
 // =============================================================================
+// Auth error helpers
+// =============================================================================
+
+export function friendlySignInError(raw) {
+  const msg = (raw || '').toLowerCase();
+  if (msg.includes('invalid login') || msg.includes('invalid credentials')) {
+    return 'Invalid email or password. Please check and try again.';
+  }
+  if (msg.includes('email not confirmed')) {
+    return 'Please confirm your email address first — check your inbox for a verification link.';
+  }
+  if (msg.includes('rate limit') || msg.includes('too many')) {
+    return 'Too many attempts. Please wait a moment and try again.';
+  }
+  if (msg.includes('network') || msg.includes('fetch')) {
+    return 'Network error. Please check your connection and try again.';
+  }
+  return raw || 'Sign in failed. Please try again.';
+}
+
+export function friendlySignUpError(raw) {
+  const msg = (raw || '').toLowerCase();
+  if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
+    return 'An account with that email already exists. Try signing in instead.';
+  }
+  if (msg.includes('invalid') && msg.includes('email')) {
+    return 'Enter a valid email address.';
+  }
+  if (msg.includes('weak password') || msg.includes('password should')) {
+    return 'Password is too weak. Use at least 8 characters with letters and numbers.';
+  }
+  if (msg.includes('rate limit') || msg.includes('too many')) {
+    return 'Too many attempts. Please wait a moment and try again.';
+  }
+  if (msg.includes('network') || msg.includes('fetch')) {
+    return 'Network error. Please check your connection and try again.';
+  }
+  return raw || 'Sign up failed. Please try again.';
+}
+
+// =============================================================================
 // Date / Time formatting
 // =============================================================================
 

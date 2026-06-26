@@ -9,6 +9,7 @@ import Svg, { Circle, Line, Text as SvgText } from 'react-native-svg';
 import Animated, {
   useSharedValue, useAnimatedStyle,
   withRepeat, withSequence, withTiming, withDelay,
+  cancelAnimation,
 } from 'react-native-reanimated';
 import { useDreamStore } from '../../store';
 import { COLORS, SYMBOLS } from '../../constants/theme';
@@ -106,6 +107,7 @@ function TwinkleStar({ x, y, size, delay }) {
         false
       )
     );
+    return () => cancelAnimation(opacity);
   }, []);
 
   const style = useAnimatedStyle(() => ({ opacity: opacity.value }));

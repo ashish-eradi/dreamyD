@@ -86,12 +86,12 @@ export async function signInWithEmail(email, password) {
  * @param {string} [name] — optional display name stored in user metadata
  * @returns {import('@supabase/supabase-js').Session | null}
  */
-export async function signUpWithEmail(email, password, name) {
+export async function signUpWithEmail(email, password, name, extraMetadata = {}) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      data: { full_name: name ?? '' },
+      data: { full_name: name ?? '', ...extraMetadata },
     },
   });
   if (error) throw error;

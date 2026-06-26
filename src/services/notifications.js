@@ -186,6 +186,70 @@ export async function cancelWakeUpNotification() {
   }
 }
 
+// Identifiers for the 5 reality-check notifications
+const REALITY_CHECK_TIMES_24H = ['08:00', '11:00', '14:00', '17:00', '21:00'];
+const REALITY_CHECK_ID_PREFIX = 'reality-check-';
+
+const REALITY_CHECK_MESSAGES = [
+  { title: 'Reality check ✦', body: 'Are you dreaming right now? Look at your hands.' },
+  { title: 'Are you awake?', body: 'Check your surroundings. Could this be a dream?' },
+  { title: 'Lucid moment ☾', body: 'Pause and ask: am I dreaming? Notice the details.' },
+];
+
+/**
+ * Schedule 5 daily reality-check notifications at fixed times throughout the day.
+ * Any previously scheduled reality-check notifications are replaced.
+ */
+export async function scheduleRealityCheckNotifications() {
+  await cancelRealityCheckNotifications();
+  const results = [];
+  for (let i = 0; i < REALITY_CHECK_TIMES_24H.length; i++) {
+    const parsed = parseWakeTime(REALITY_CHECK_TIMES_24H[i]);
+    if (!parsed) continue;
+    const msg = REALITY_CHECK_MESSAGES[i % REALITY_CHECK_MESSAGES.length];
+    try {
+      const id = await Notifications.scheduleNotificationAsync({
+        identifier: `${REALITY_CHECK_ID_PREFIX}${i}`,
+        content: {
+          title: msg.title,
+          body: msg.body,
+          sound: true,
+          data: { type: 'reality_check' },
+          ...(Platform.OS === 'android' && { channelId: CHANNEL_ID }),
+        },
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DAILY,
+          hour: parsed.hour,
+          minute: parsed.minute,
+        },
+      });
+      results.push(id);
+    } catch (err) {
+      console.warn(`[Notifications] Reality check ${i} schedule failed:`, err);
+    }
+  }
+  return results;
+}
+
+/**
+ * Cancel all 5 reality-check notifications.
+ */
+export async function cancelRealityCheckNotifications() {
+  for (let i = 0; i < REALITY_CHECK_TIMES_24H.length; i++) {
+    try {
+      await Notifications.cancelScheduledNotificationAsync(`${REALITY_CHECK_ID_PREFIX}${i}`);
+    } catch { /* not yet scheduled — ignore */ }
+  }
+}
+
+/**
+ * Return true if any reality-check notification is currently scheduled.
+ */
+export async function areRealityChecksScheduled() {
+  const all = await Notifications.getAllScheduledNotificationsAsync();
+  return all.some(n => n.identifier?.startsWith(REALITY_CHECK_ID_PREFIX));
+}
+
 /**
  * Cancel every scheduled notification for this app.
  * Use this on sign-out or when the user disables reminders entirely.

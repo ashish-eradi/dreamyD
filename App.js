@@ -32,7 +32,7 @@ import {
 } from '@expo-google-fonts/lora';
 
 // ── Supabase ──────────────────────────────────────────────────────────────────
-import { supabase, onAuthStateChange, getProfile } from './src/services/supabase';
+import { supabase, onAuthStateChange, getProfile, updateProfile } from './src/services/supabase';
 
 // ── Notifications ─────────────────────────────────────────────────────────────
 import {
@@ -245,11 +245,11 @@ export default function App() {
    */
   async function hydrateProfile(userId) {
     try {
-      const profile = await getProfile(userId);
+      let profile = await getProfile(userId);
       if (!profile) return;
 
       setIsPremium(profile.is_premium ?? false);
-      if (setOnboardingDone) setOnboardingDone(profile.onboarding_done ?? false);
+      setOnboardingDone(profile.onboarding_done ?? false);
 
       // Merge name from the users table into the store's user object so
       // Settings shows the correct name even if user_metadata wasn't set.
@@ -257,6 +257,16 @@ export default function App() {
         const currentUser = useDreamStore.getState().user;
         if (currentUser) {
           setUser({ ...currentUser, user_metadata: { ...currentUser.user_metadata, full_name: profile.name } });
+        }
+      }
+
+      // Apply pending_wake_time stored in user_metadata during email-confirmation signup
+      if (!profile.wake_time) {
+        const currentUser = useDreamStore.getState().user;
+        const pendingWakeTime = currentUser?.user_metadata?.pending_wake_time;
+        if (pendingWakeTime) {
+          await updateProfile(userId, { wake_time: pendingWakeTime, onboarding_done: true }).catch(() => {});
+          profile = { ...profile, wake_time: pendingWakeTime };
         }
       }
 

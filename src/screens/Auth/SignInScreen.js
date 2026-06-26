@@ -7,21 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { signInWithEmail } from '../../services/supabase';
 import { useDreamStore } from '../../store';
+import { friendlySignInError } from '../../utils';
 import { COLORS } from '../../constants/theme';
-
-function friendlyAuthError(raw) {
-  const msg = (raw || '').toLowerCase();
-  if (msg.includes('invalid login') || msg.includes('invalid credentials') || msg.includes('email not confirmed')) {
-    return 'Invalid email or password. Please check and try again.';
-  }
-  if (msg.includes('rate limit') || msg.includes('too many')) {
-    return 'Too many attempts. Please wait a moment and try again.';
-  }
-  if (msg.includes('network') || msg.includes('fetch')) {
-    return 'Network error. Please check your connection and try again.';
-  }
-  return raw || 'Sign in failed. Please try again.';
-}
 
 export default function SignInScreen() {
   const navigation = useNavigation();
@@ -46,7 +33,7 @@ export default function SignInScreen() {
         useDreamStore.getState().setSession(session);
       }
     } catch (err) {
-      setError(friendlyAuthError(err?.message));
+      setError(friendlySignInError(err?.message));
     } finally {
       setLoading(false);
     }

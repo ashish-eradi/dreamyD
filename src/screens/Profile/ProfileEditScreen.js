@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, TextInput, TouchableOpacity, StyleSheet,
   StatusBar, KeyboardAvoidingView, ScrollView,
@@ -9,8 +9,6 @@ import { useNavigation } from '@react-navigation/native';
 import { useDreamStore } from '../../store';
 import { updateProfile } from '../../services/supabase';
 import { COLORS } from '../../constants/theme';
-
-const WAKE_PRESETS = ['05:00 AM', '05:30 AM', '06:00 AM', '06:30 AM', '07:00 AM', '07:30 AM', '08:00 AM'];
 
 export default function ProfileEditScreen() {
   const navigation = useNavigation();
@@ -25,6 +23,11 @@ export default function ProfileEditScreen() {
   const [loading,  setLoading]  = useState(false);
   const [error,    setError]    = useState(null);
   const [success,  setSuccess]  = useState(false);
+  const goBackTimerRef = useRef(null);
+
+  useEffect(() => {
+    return () => { if (goBackTimerRef.current) clearTimeout(goBackTimerRef.current); };
+  }, []);
 
   const handleSave = async () => {
     setError(null);
@@ -36,13 +39,12 @@ export default function ProfileEditScreen() {
     setLoading(true);
     try {
       await updateProfile(user.id, { name: trimmed });
-      // Reflect in store so header/settings show updated name immediately
       setUser({
         ...user,
         user_metadata: { ...(user.user_metadata ?? {}), full_name: trimmed },
       });
       setSuccess(true);
-      setTimeout(() => navigation.goBack(), 800);
+      goBackTimerRef.current = setTimeout(() => navigation.goBack(), 800);
     } catch (err) {
       setError(err?.message || 'Failed to save. Please try again.');
     } finally {

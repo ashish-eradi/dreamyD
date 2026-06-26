@@ -102,7 +102,7 @@ export default function PaywallScreen() {
   const navigation = useNavigation();
   const insets     = useSafeAreaInsets();
   const [loading, setLoading] = useState(false);
-  const setPremium = useDreamStore(s => s.setPremium);
+  const setPremium = useDreamStore(s => s.setIsPremium);
 
   const handlePurchase = async () => {
     setLoading(true);

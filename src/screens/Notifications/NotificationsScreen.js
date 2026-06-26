@@ -11,7 +11,11 @@ import {
   requestPermissions,
   scheduleWakeUpNotification,
   cancelWakeUpNotification,
+  scheduleRealityCheckNotifications,
+  cancelRealityCheckNotifications,
+  areRealityChecksScheduled,
 } from '../../services/notifications';
+import { formatWakeTimeTo24h } from '../../utils';
 import { COLORS } from '../../constants/theme';
 
 // ─── Time picker data ─────────────────────────────────────────────────────────
@@ -37,13 +41,6 @@ function parse24hTo12h(time24) {
     minute: m.padStart(2, '0').slice(0, 2),
     period,
   };
-}
-
-function format12hTo24h(hour, minute, period) {
-  let h = parseInt(hour, 10);
-  if (period === 'AM') { if (h === 12) h = 0; }
-  else                 { if (h !== 12) h += 12; }
-  return `${String(h).padStart(2, '0')}:${minute}:00`;
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -115,11 +112,14 @@ export default function NotificationsScreen() {
   const [saving,         setSaving]         = useState(false);
   const [permDenied,     setPermDenied]     = useState(false);
 
-  // Load current settings from profile
+  // Load current settings from profile + check scheduled reality-check notifications
   useEffect(() => {
     if (!user?.id) { setLoading(false); return; }
-    getProfile(user.id)
-      .then(profile => {
+    Promise.all([
+      getProfile(user.id),
+      areRealityChecksScheduled(),
+    ])
+      .then(([profile, checksActive]) => {
         if (profile?.wake_time) {
           const { hour: h, minute: m, period: p } = parse24hTo12h(profile.wake_time);
           setHour(h); setMinute(m); setPeriod(p);
@@ -127,6 +127,7 @@ export default function NotificationsScreen() {
         } else {
           setWakeEnabled(false);
         }
+        setChecksEnabled(checksActive);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -136,33 +137,41 @@ export default function NotificationsScreen() {
     if (!user?.id) return;
     setSaving(true);
     try {
-      if (wakeEnabled) {
-        // Request permission if needed
+      if (wakeEnabled || checksEnabled) {
         const granted = await requestPermissions();
         if (!granted) {
           setPermDenied(true);
           Alert.alert(
             'Notifications blocked',
-            'Enable notifications for DreamDiary in your device Settings to receive wake-up reminders.',
+            'Enable notifications for DreamDiary in your device Settings to receive reminders.',
           );
-          setSaving(false);
           return;
         }
         setPermDenied(false);
-        const time24 = format12hTo24h(hour, minute, period);
+      }
+
+      if (wakeEnabled) {
+        const time24 = formatWakeTimeTo24h(`${hour}:${minute} ${period}`);
         await updateProfile(user.id, { wake_time: time24 });
         await scheduleWakeUpNotification(time24);
       } else {
         await updateProfile(user.id, { wake_time: null });
         await cancelWakeUpNotification();
       }
+
+      if (checksEnabled) {
+        await scheduleRealityCheckNotifications();
+      } else {
+        await cancelRealityCheckNotifications();
+      }
+
       navigation.goBack();
     } catch (err) {
       Alert.alert('Could not save', err?.message || 'Please try again.');
     } finally {
       setSaving(false);
     }
-  }, [user?.id, wakeEnabled, hour, minute, period]);
+  }, [user?.id, wakeEnabled, checksEnabled, hour, minute, period]);
 
   if (loading) {
     return (

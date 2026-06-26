@@ -6,28 +6,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { signUpWithEmail, updateProfile } from '../../services/supabase';
-import { formatWakeTimeTo24h } from '../../utils';
+import { formatWakeTimeTo24h, friendlySignUpError } from '../../utils';
 import { COLORS } from '../../constants/theme';
 import { useDreamStore } from '../../store';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-function friendlyAuthError(raw) {
-  const msg = (raw || '').toLowerCase();
-  if (msg.includes('already registered') || msg.includes('already exists') || msg.includes('user already')) {
-    return 'An account with that email already exists. Try signing in instead.';
-  }
-  if (msg.includes('invalid') && msg.includes('email')) {
-    return 'Enter a valid email address.';
-  }
-  if (msg.includes('weak password') || msg.includes('password should')) {
-    return 'Password is too weak. Use at least 8 characters with letters and numbers.';
-  }
-  if (msg.includes('network') || msg.includes('fetch')) {
-    return 'Network error. Please check your connection and try again.';
-  }
-  return raw || 'Sign up failed. Please try again.';
-}
 
 export default function SignUpScreen() {
   const navigation = useNavigation();
@@ -54,31 +37,33 @@ export default function SignUpScreen() {
     if (password.length < 8) { setError('Password must be at least 8 characters.'); return; }
     setLoading(true);
     try {
-      const { session, user } = await signUpWithEmail(email.trim(), password, name.trim());
+      // Compute wake_time before calling signUp so it can go into user_metadata
+      // for the email-confirmation flow (where no session is returned immediately).
+      const time24h = wakeTime ? formatWakeTimeTo24h(wakeTime) : null;
+      const pendingMeta = time24h ? { pending_wake_time: time24h } : {};
+
+      const { session, user } = await signUpWithEmail(email.trim(), password, name.trim(), pendingMeta);
 
       if (!session && user) {
-        // Email confirmation is enabled — user exists but needs to verify
+        // Email confirmation required — wake_time is stored in user_metadata and
+        // will be applied by hydrateProfile on first sign-in after confirmation.
         setConfirmSent(true);
         return;
       }
 
       if (session?.user?.id) {
         const profileUpdates = { onboarding_done: true };
-        const time24h = wakeTime ? formatWakeTimeTo24h(wakeTime) : null;
         if (time24h) profileUpdates.wake_time = time24h;
         try {
           await updateProfile(session.user.id, profileUpdates);
-          // Set in store immediately so RootNavigator routes to tabs without waiting
-          // for hydrateProfile to re-read the DB (avoids race condition).
           useDreamStore.getState().setOnboardingDone(true);
         } catch (profileErr) {
           console.warn('[SignUp] updateProfile failed:', profileErr?.message);
-          // Still mark done locally so the user isn't stuck in onboarding
           useDreamStore.getState().setOnboardingDone(true);
         }
       }
     } catch (err) {
-      setError(friendlyAuthError(err?.message));
+      setError(friendlySignUpError(err?.message));
     } finally {
       setLoading(false);
     }
