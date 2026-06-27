@@ -14,6 +14,8 @@
 import OpenAI from 'openai';
 import * as FileSystem from 'expo-file-system';
 import Constants from 'expo-constants';
+import { supabase } from './supabase';
+import { logApiUsage } from './costTracking';
 
 // ---------------------------------------------------------------------------
 // Client
@@ -68,7 +70,7 @@ Return only valid JSON, no extra text, no markdown code fences.`;
  * @returns {Promise<string>} — the raw transcript text
  * @throws {Error} if the upload or API call fails
  */
-export async function transcribeAudio(audioUri, language) {
+export async function transcribeAudio(audioUri, language, { userId, dreamId } = {}) {
   if (!audioUri) {
     throw new Error('[OpenAI.transcribeAudio] audioUri is required.');
   }
@@ -109,8 +111,17 @@ export async function transcribeAudio(audioUri, language) {
 
   const transcription = await openai.audio.transcriptions.create(params);
 
-  // When response_format is 'text', the SDK returns the transcript as a plain
-  // string rather than an object.
+  // Estimate audio duration from file size (rough: ~16kB/s for m4a at low bitrate)
+  const fileSizeBytes = bytes.length;
+  const estimatedDurationSecs = fileSizeBytes / 16000;
+
+  logApiUsage({
+    service: 'whisper',
+    userId,
+    dreamId,
+    audioDurationSecs: estimatedDurationSecs,
+  });
+
   return typeof transcription === 'string'
     ? transcription.trim()
     : (transcription.text ?? '').trim();
@@ -135,7 +146,7 @@ export async function transcribeAudio(audioUri, language) {
  * @returns {Promise<DreamAnalysis>}
  * @throws {Error} if the API call fails or the response is not valid JSON
  */
-export async function analyzeDream(transcript) {
+export async function analyzeDream(transcript, { userId, dreamId } = {}) {
   if (!transcript || transcript.trim().length === 0) {
     throw new Error('[OpenAI.analyzeDream] transcript cannot be empty.');
   }
@@ -158,6 +169,15 @@ export async function analyzeDream(transcript) {
   });
 
   const rawContent = response.choices?.[0]?.message?.content ?? '';
+  const usage = response.usage;
+
+  logApiUsage({
+    service:  'gpt-4o',
+    userId,
+    dreamId,
+    tokensIn:  usage?.prompt_tokens     ?? null,
+    tokensOut: usage?.completion_tokens ?? null,
+  });
 
   let parsed;
   try {
@@ -189,7 +209,7 @@ export async function analyzeDream(transcript) {
  *                               recent 20–30 for best results)
  * @returns {Promise<DreamPattern[]>} — up to 3 detected patterns
  */
-export async function detectPatterns(summaries) {
+export async function detectPatterns(summaries, { userId } = {}) {
   if (!summaries || summaries.length === 0) {
     return [];
   }
@@ -217,6 +237,15 @@ Return only valid JSON (an array), no extra text.`;
   });
 
   const rawContent = response.choices?.[0]?.message?.content ?? '[]';
+  const usage = response.usage;
+
+  logApiUsage({
+    service:  'gpt-4o',
+    userId,
+    tokensIn:  usage?.prompt_tokens     ?? null,
+    tokensOut: usage?.completion_tokens ?? null,
+    metadata:  { task: 'detectPatterns' },
+  });
 
   let parsed;
   try {
