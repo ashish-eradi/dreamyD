@@ -20,8 +20,49 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { useDreamStore } from '../../store';
 import { getDreams } from '../../services/supabase';
+import { areRealityChecksScheduled } from '../../services/notifications';
 import { getDreamStreak, getTopEmotion, getTopSymbols } from '../../utils';
 import { COLORS, getMoodStyle, getSymbolStyle } from '../../constants/theme';
+
+// ─── Tonight helpers ───────────────────────────────────────────────────────────
+
+const REALITY_CHECK_TIMES = ['08:00', '11:00', '14:00', '17:00', '21:00'];
+
+function getNextCheckLabel() {
+  const now = new Date();
+  const nowMins = now.getHours() * 60 + now.getMinutes();
+  for (const t of REALITY_CHECK_TIMES) {
+    const [h, m] = t.split(':').map(Number);
+    const checkMins = h * 60 + m;
+    if (checkMins > nowMins) {
+      const diff = checkMins - nowMins;
+      const hours = Math.floor(diff / 60);
+      const mins = diff % 60;
+      return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+    }
+  }
+  return 'tomorrow at 8 AM';
+}
+
+function fmt12hShort(time24h) {
+  if (!time24h) return '4:18 AM';
+  const [h, m] = time24h.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+function calcRemPeakTime(wakeTime24h) {
+  if (!wakeTime24h) return '4:18 AM';
+  const [wh, wm] = wakeTime24h.split(':').map(Number);
+  const sleepStartMins = 22 * 60 + 30;
+  let wakeTimeMins = wh * 60 + wm;
+  if (wakeTimeMins < sleepStartMins) wakeTimeMins += 24 * 60;
+  const remMinsSinceMidnight = (sleepStartMins + (wakeTimeMins - sleepStartMins) * 0.75) % (24 * 60);
+  const remH = Math.floor(remMinsSinceMidnight / 60);
+  const remM = Math.floor(remMinsSinceMidnight % 60);
+  return fmt12hShort(`${String(remH).padStart(2, '0')}:${String(remM).padStart(2, '0')}`);
+}
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -253,7 +294,7 @@ function AIInsightCard({ onPress, isPremium, topSymbol, dreamCount }) {
 
 // ─── QuickActionsGrid ─────────────────────────────────────────────────────────
 
-function QuickActionsGrid({ onLucid, onRecord }) {
+function QuickActionsGrid({ onLucid, onRecord, nextCheckLabel, checksEnabled }) {
   return (
     <Animated.View entering={FadeInDown.delay(320).duration(380)}>
       <Text style={[styles.sectionLabel, { marginBottom: 10 }]}>TONIGHT</Text>
@@ -268,7 +309,9 @@ function QuickActionsGrid({ onLucid, onRecord }) {
             <Text style={{ fontSize: 15, color: COLORS.plum }}>◐</Text>
           </View>
           <Text style={styles.quickTitle}>Reality check</Text>
-          <Text style={styles.quickSub}>Your next nudge in 2h 14m</Text>
+          <Text style={styles.quickSub}>
+            {checksEnabled ? `Next nudge in ${nextCheckLabel}` : 'Enable in Lucid trainer'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -290,11 +333,11 @@ function QuickActionsGrid({ onLucid, onRecord }) {
 
 // ─── TonightCard ──────────────────────────────────────────────────────────────
 
-function TonightCard({ onLucid, onRecord }) {
+function TonightCard({ onLucid, onRecord, nextCheckLabel, wakeLabel, checksEnabled }) {
   const items = [
-    { icon: '◐', title: "Set tonight's intention", sub: '5 sec for lucidity', onPress: onLucid },
-    { icon: '◔', title: 'Reality check at 8 PM',    sub: 'in 2h 14m',         onPress: onLucid },
-    { icon: '☾', title: 'Wake & capture dream',      sub: 'optimal: 4:18 AM',  onPress: onRecord },
+    { icon: '◐', title: "Set tonight's intention",   sub: '5 sec for lucidity',                                                  onPress: onLucid  },
+    { icon: '◔', title: 'Reality check',             sub: checksEnabled ? `next in ${nextCheckLabel}` : 'Enable in Lucid trainer', onPress: onLucid  },
+    { icon: '☾', title: 'Wake & capture dream',      sub: `optimal: ${wakeLabel}`,                                                onPress: onRecord },
   ];
   return (
     <Animated.View entering={FadeInDown.delay(400).duration(380)} style={styles.card}>
@@ -324,8 +367,18 @@ export default function HomeScreen({ navigation }) {
   const user            = useDreamStore((s) => s.user);
   const isPremium       = useDreamStore((s) => s.isPremium);
   const dreams          = useDreamStore((s) => s.dreams);
+  const wakeTime        = useDreamStore((s) => s.wakeTime);
   const setDreams       = useDreamStore((s) => s.setDreams);
   const setCurrentDream = useDreamStore((s) => s.setCurrentDream);
+
+  const [checksEnabled, setChecksEnabled] = React.useState(false);
+
+  React.useEffect(() => {
+    areRealityChecksScheduled().then(setChecksEnabled).catch(() => {});
+  }, []);
+
+  const nextCheckLabel = getNextCheckLabel();
+  const wakeLabel = calcRemPeakTime(wakeTime);
 
   const lastDream = dreams.length > 0 ? dreams[0] : null;
   const streak    = getDreamStreak(dreams);
@@ -445,13 +498,13 @@ export default function HomeScreen({ navigation }) {
           />
 
           {/* ── Quick actions grid ── */}
-          <QuickActionsGrid onLucid={handleLucid} onRecord={handleRecord} />
+          <QuickActionsGrid onLucid={handleLucid} onRecord={handleRecord} nextCheckLabel={nextCheckLabel} checksEnabled={checksEnabled} />
 
           {/* ── Streak card ── */}
           <StreakCard streak={streak} monthCount={thisMonthCount} />
 
           {/* ── Tonight rituals ── */}
-          <TonightCard onLucid={handleLucid} onRecord={handleRecord} />
+          <TonightCard onLucid={handleLucid} onRecord={handleRecord} nextCheckLabel={nextCheckLabel} wakeLabel={wakeLabel} checksEnabled={checksEnabled} />
 
           <View style={{ height: Platform.OS === 'ios' ? 100 : 80 }} />
         </ScrollView>

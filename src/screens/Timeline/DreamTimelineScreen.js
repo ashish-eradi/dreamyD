@@ -43,6 +43,8 @@ const MOOD_FILTERS = [
   { id: 'melan',  label: 'Tender' },
 ];
 
+const Separator = () => <View style={styles.itemSeparator} />;
+
 // =============================================================================
 // FilterChip
 // =============================================================================
@@ -370,7 +372,7 @@ export default function DreamTimelineScreen() {
             filteredDreams.length === 0 && styles.listContentEmpty,
           ]}
           showsVerticalScrollIndicator={false}
-          ItemSeparatorComponent={() => <View style={styles.itemSeparator} />}
+          ItemSeparatorComponent={Separator}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}

@@ -45,6 +45,7 @@ const createAuthSlice = (set) => ({
   isPremium: false,
   onboardingDone: false,
   needsPasswordReset: false,
+  wakeTime: null,
 
   // ── Actions ───────────────────────────────────────────────────────────────
   setUser: (user) => set({ user }),
@@ -61,6 +62,7 @@ const createAuthSlice = (set) => ({
   setIsPremium: (isPremium) => set({ isPremium }),
   setOnboardingDone: (onboardingDone) => set({ onboardingDone }),
   setNeedsPasswordReset: (needsPasswordReset) => set({ needsPasswordReset }),
+  setWakeTime: (wakeTime) => set({ wakeTime }),
 
   signOut: () =>
     set({

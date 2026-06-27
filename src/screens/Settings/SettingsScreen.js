@@ -8,7 +8,7 @@
 import React, { useMemo } from 'react';
 import {
   View, Text, ScrollView, TouchableOpacity,
-  StyleSheet, StatusBar, Alert, Platform,
+  StyleSheet, StatusBar, Alert, Platform, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -268,6 +268,38 @@ export default function SettingsScreen() {
   const topSymbols  = useMemo(() => getTopSymbols(monthDreams), [monthDreams]);
   const moodWeeks   = useMemo(() => getMoodWeeks(monthDreams), [monthDreams]);
 
+  const handlePrivacy = () => {
+    Alert.alert(
+      'Privacy',
+      'Your voice recordings are transcribed via OpenAI Whisper and then deleted from our servers. Dream content is stored securely in Supabase with row-level security — only you can access your data. We never sell your data.',
+      [{ text: 'OK' }]
+    );
+  };
+
+  const handleExport = async () => {
+    const exportData = {
+      exported_at: new Date().toISOString(),
+      dreams: dreams.map(d => ({
+        id: d.id,
+        title: d.title,
+        ai_summary: d.ai_summary,
+        transcript: d.transcript,
+        recorded_at: d.recorded_at,
+        is_favourite: d.is_favourite,
+        vividness_score: d.vividness_score,
+        tags: (d.dream_tags ?? []).map(t => ({ type: t.type, label: t.label })),
+      })),
+    };
+    try {
+      await Share.share({
+        message: JSON.stringify(exportData, null, 2),
+        title: 'DreamDiary export',
+      });
+    } catch (e) {
+      Alert.alert('Export failed', e?.message);
+    }
+  };
+
   const handleSignOut = () => {
     Alert.alert('Sign out?', 'You can sign back in anytime.', [
       { text: 'Cancel', style: 'cancel' },
@@ -355,9 +387,9 @@ export default function SettingsScreen() {
         {/* ── Settings rows ── */}
         <View style={[styles.card, { padding: 0, overflow: 'hidden', marginTop: 8 }]}>
           <SettingsRow icon="◔" title="Notifications"    sub="Wake-up reminder, reality checks" onPress={() => navigation.navigate('Notifications')} />
-          <SettingsRow icon="⌑" title="Privacy"          sub="On-device transcription" />
-          <SettingsRow icon="↗" title="Export your data" sub="JSON, PDF, Markdown" />
-          <SettingsRow icon="♡" title="Therapist sharing" sub="HIPAA-friendly" last />
+          <SettingsRow icon="⌑" title="Privacy"          sub="How your data is stored and used" onPress={handlePrivacy} />
+          <SettingsRow icon="↗" title="Export your data" sub="Share your full dream journal as JSON" onPress={handleExport} />
+          <SettingsRow icon="♡" title="Therapist sharing" sub="Monthly report · HIPAA-friendly" last onPress={() => navigation.navigate('MonthlyReport')} />
         </View>
 
         {/* ── Sign out ── */}

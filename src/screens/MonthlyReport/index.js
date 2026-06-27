@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Alert, Share,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
@@ -77,6 +77,32 @@ export default function MonthlyReportScreen() {
   }, [monthDreams]);
 
   const maxMood = Math.max(...moodArc.flatMap(w => Object.entries(w).filter(([k]) => k !== 'd').map(([, v]) => v)), 1);
+
+  const handleTherapistExport = async () => {
+    const lines = [
+      `DreamDiary Monthly Report — ${monthName}`,
+      '',
+      `Summary: ${totalEntries} dream${totalEntries !== 1 ? 's' : ''} recorded.`,
+      `Dominant emotion: ${MOOD_LABELS[topMood] || topMood}`,
+      '',
+      'RECURRING SYMBOLS',
+      ...symbolCounts.map(([sym, count]) => `  ${sym}: ${count} appearance${count !== 1 ? 's' : ''}`),
+      '',
+      'DREAMS',
+      ...monthDreams.flatMap(d => [
+        `  ${new Date(d.recorded_at).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' })}`,
+        d.title ? `  Title: ${d.title}` : null,
+        d.ai_summary ? `  ${d.ai_summary}` : null,
+        '',
+      ].filter(Boolean)),
+    ].join('\n');
+
+    try {
+      await Share.share({ message: lines, title: `DreamDiary — ${monthName}` });
+    } catch (e) {
+      Alert.alert('Export failed', e?.message);
+    }
+  };
 
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }
@@ -189,18 +215,18 @@ export default function MonthlyReportScreen() {
 
         {/* Export */}
         {isPremium && (
-          <View style={styles.card}>
+          <TouchableOpacity style={styles.card} onPress={handleTherapistExport} activeOpacity={0.8}>
             <View style={styles.exportRow}>
               <View style={styles.exportIcon}>
                 <Text style={{ fontSize: 16 }}>↗</Text>
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.exportTitle}>Therapist export</Text>
-                <Text style={styles.exportSub}>Structured PDF · HIPAA-friendly</Text>
+                <Text style={styles.exportSub}>Share formatted report · HIPAA-friendly</Text>
               </View>
               <Text style={{ color: COLORS.ink3 }}>→</Text>
             </View>
-          </View>
+          </TouchableOpacity>
         )}
         {!isPremium && (
           <TouchableOpacity style={styles.upsellCard} onPress={() => navigation.navigate('Paywall')}>

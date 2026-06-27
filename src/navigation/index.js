@@ -6,7 +6,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useStore } from '../store';
+import { useDreamStore } from '../store';
 import { COLORS } from '../constants/theme';
 
 // Onboarding
@@ -93,7 +93,7 @@ function RecordTabButton({ onPress, style, accessibilityState }) {
 
 // ─── App tabs ────────────────────────────────────────────────────────────────
 function AppTabs() {
-  const isPremium = useStore(s => s.isPremium ?? false);
+  const isPremium = useDreamStore(s => s.isPremium ?? false);
 
   return (
     <Tab.Navigator

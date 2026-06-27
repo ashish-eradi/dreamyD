@@ -250,6 +250,51 @@ export async function areRealityChecksScheduled() {
   return all.some(n => n.identifier?.startsWith(REALITY_CHECK_ID_PREFIX));
 }
 
+// Identifier for the WBTB one-time alarm
+const WBTB_NOTIFICATION_ID = 'wbtb-alarm';
+
+/**
+ * Schedule a daily wake-back-to-bed alarm at the given time.
+ * Replaces any previously set WBTB alarm.
+ *
+ * @param {string} time24h — "HH:MM" format
+ * @returns {Promise<string | null>}
+ */
+export async function scheduleWBTBNotification(time24h) {
+  const parsed = parseWakeTime(time24h);
+  if (!parsed) return null;
+  try {
+    await Notifications.cancelScheduledNotificationAsync(WBTB_NOTIFICATION_ID).catch(() => {});
+    return await Notifications.scheduleNotificationAsync({
+      identifier: WBTB_NOTIFICATION_ID,
+      content: {
+        title: 'Wake-Back-To-Bed ☾',
+        body: 'Time to wake briefly. Fall back asleep with the intention to dream lucidly.',
+        sound: true,
+        data: { type: 'wbtb' },
+        ...(Platform.OS === 'android' && { channelId: CHANNEL_ID }),
+      },
+      trigger: {
+        type: Notifications.SchedulableTriggerInputTypes.DAILY,
+        hour: parsed.hour,
+        minute: parsed.minute,
+      },
+    });
+  } catch (err) {
+    console.warn('[Notifications] WBTB schedule failed:', err);
+    return null;
+  }
+}
+
+/**
+ * Cancel the WBTB alarm if set.
+ */
+export async function cancelWBTBNotification() {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(WBTB_NOTIFICATION_ID);
+  } catch {}
+}
+
 /**
  * Cancel every scheduled notification for this app.
  * Use this on sign-out or when the user disables reminders entirely.

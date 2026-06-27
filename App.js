@@ -103,6 +103,7 @@ export default function App() {
   const setIsPremium           = useDreamStore((s) => s.setIsPremium);
   const setOnboardingDone      = useDreamStore((s) => s.setOnboardingDone);
   const setNeedsPasswordReset  = useDreamStore((s) => s.setNeedsPasswordReset);
+  const setWakeTime            = useDreamStore((s) => s.setWakeTime);
   const storeSignOut           = useDreamStore((s) => s.signOut);
 
   // ── Store state ───────────────────────────────────────────────────────────
@@ -271,6 +272,7 @@ export default function App() {
 
       setIsPremium(profile.is_premium ?? false);
       setOnboardingDone(profile.onboarding_done ?? false);
+      setWakeTime(profile.wake_time ?? null);
 
       // Merge name from the users table into the store's user object so
       // Settings shows the correct name even if user_metadata wasn't set.

@@ -1,10 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
-  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Switch,
+  View, Text, ScrollView, TouchableOpacity, StyleSheet, StatusBar, Switch, Alert,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useDreamStore } from '../../store';
+import {
+  requestPermissions,
+  scheduleRealityCheckNotifications,
+  cancelRealityCheckNotifications,
+  areRealityChecksScheduled,
+  scheduleWBTBNotification,
+  cancelWBTBNotification,
+} from '../../services/notifications';
 import { COLORS } from '../../constants/theme';
 
 const TECHNIQUES = [
@@ -15,13 +25,111 @@ const TECHNIQUES = [
 
 const REALITY_TIMES = ['08:00', '11:00', '14:00', '17:00', '21:00'];
 
-export default function LucidTrainerScreen() {
-  const navigation = useNavigation();
-  const insets = useSafeAreaInsets();
-  const [reminders, setReminders] = useState(true);
-  const [tech, setTech] = useState('MILD');
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  const completedChecks = 2;
+function todayKey() {
+  const d = new Date();
+  return `@dreamdiary/rcDone_${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+}
+
+function fmt12h(time24h) {
+  if (!time24h) return '';
+  const [h, m] = time24h.split(':').map(Number);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h === 0 ? 12 : h > 12 ? h - 12 : h;
+  return `${h12}:${String(m).padStart(2, '0')} ${period}`;
+}
+
+// Calculate WBTB alarm time: wakeTime minus 3 hours
+function calcWBTBTime(wakeTime24h) {
+  if (!wakeTime24h) return '04:00';
+  const [h, m] = wakeTime24h.split(':').map(Number);
+  let wbtbH = h - 3;
+  if (wbtbH < 0) wbtbH += 24;
+  return `${String(wbtbH).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+}
+
+// Calculate REM peak time: 75% through sleep session (assumed sleep onset 22:30)
+function calcRemPeakTime(wakeTime24h) {
+  if (!wakeTime24h) return '04:18 AM';
+  const [wh, wm] = wakeTime24h.split(':').map(Number);
+  const sleepStartMins = 22 * 60 + 30;
+  let wakeTimeMins = wh * 60 + wm;
+  if (wakeTimeMins < sleepStartMins) wakeTimeMins += 24 * 60;
+  const sleepDuration = wakeTimeMins - sleepStartMins;
+  const remMinsSinceMidnight = (sleepStartMins + sleepDuration * 0.75) % (24 * 60);
+  const remH = Math.floor(remMinsSinceMidnight / 60);
+  const remM = Math.floor(remMinsSinceMidnight % 60);
+  return fmt12h(`${String(remH).padStart(2, '0')}:${String(remM).padStart(2, '0')}`);
+}
+
+// Position of REM peak within the bar (0.0–1.0) — always ~75%
+const REM_PEAK_LEFT = '58%';
+const REM_PEAK_WIDTH = '18%';
+
+export default function LucidTrainerScreen() {
+  const navigation  = useNavigation();
+  const insets      = useSafeAreaInsets();
+  const wakeTime    = useDreamStore(s => s.wakeTime);
+
+  const [reminders,   setReminders]   = useState(false);
+  const [doneChecks,  setDoneChecks]  = useState(new Set());
+  const [alarmSet,    setAlarmSet]    = useState(false);
+  const [tech,        setTech]        = useState('MILD');
+  const [loading,     setLoading]     = useState(true);
+
+  // Load persisted state on mount
+  useEffect(() => {
+    Promise.all([
+      areRealityChecksScheduled(),
+      AsyncStorage.getItem(todayKey()).catch(() => null),
+    ]).then(([scheduled, stored]) => {
+      setReminders(scheduled);
+      if (stored) {
+        try { setDoneChecks(new Set(JSON.parse(stored))); } catch {}
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const handleToggleReminders = useCallback(async (val) => {
+    setReminders(val);
+    if (val) {
+      const granted = await requestPermissions();
+      if (!granted) {
+        setReminders(false);
+        Alert.alert('Notifications blocked', 'Enable notifications for DreamDiary in your device Settings.');
+        return;
+      }
+      await scheduleRealityCheckNotifications();
+    } else {
+      await cancelRealityCheckNotifications();
+    }
+  }, []);
+
+  const handleCheckTap = useCallback(async (time) => {
+    setDoneChecks(prev => {
+      const next = new Set(prev);
+      if (next.has(time)) next.delete(time); else next.add(time);
+      AsyncStorage.setItem(todayKey(), JSON.stringify([...next])).catch(() => {});
+      return next;
+    });
+  }, []);
+
+  const handleSetAlarm = useCallback(async () => {
+    const wbtbTime = calcWBTBTime(wakeTime);
+    const granted = await requestPermissions();
+    if (!granted) {
+      Alert.alert('Notifications blocked', 'Enable notifications in your device Settings.');
+      return;
+    }
+    await scheduleWBTBNotification(wbtbTime);
+    setAlarmSet(true);
+    Alert.alert('Alarm set', `Wake-back-to-bed alarm set daily at ${fmt12h(wbtbTime)}.`);
+  }, [wakeTime]);
+
+  const completedChecks = doneChecks.size;
+  const wbtbTime = calcWBTBTime(wakeTime);
+  const remPeakTime = calcRemPeakTime(wakeTime);
 
   return (
     <View style={[styles.root, { paddingTop: insets.top }]}>
@@ -36,7 +144,11 @@ export default function LucidTrainerScreen() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <Text style={styles.sub}>2 lucid this month · onset 4:12 AM</Text>
+        <Text style={styles.sub}>
+          {completedChecks > 0
+            ? `${completedChecks} of ${REALITY_TIMES.length} checks done today`
+            : 'Train your awareness — start your checks'}
+        </Text>
         <Text style={styles.pageTitle}>Lucid trainer</Text>
 
         {/* Intro */}
@@ -52,25 +164,25 @@ export default function LucidTrainerScreen() {
           <View style={styles.rcHeader}>
             <View style={{ flex: 1 }}>
               <Text style={styles.rcTitle}>Reality checks</Text>
-              <Text style={styles.rcSub}>{completedChecks} of {REALITY_TIMES.length} done today</Text>
+              <Text style={styles.rcSub}>{completedChecks} of {REALITY_TIMES.length} done today · tap to mark</Text>
             </View>
             <Switch
               value={reminders}
-              onValueChange={setReminders}
+              onValueChange={handleToggleReminders}
               trackColor={{ false: COLORS.line2, true: COLORS.peach }}
               thumbColor="#fff"
             />
           </View>
           <View style={styles.rcGrid}>
             {REALITY_TIMES.map((t, i) => {
-              const done = i < completedChecks;
+              const done = doneChecks.has(t);
               return (
-                <View key={i} style={styles.rcCell}>
+                <TouchableOpacity key={t} style={styles.rcCell} onPress={() => handleCheckTap(t)} activeOpacity={0.7}>
                   <View style={[styles.rcBox, done && styles.rcBoxDone]}>
                     {done && <Text style={styles.rcCheck}>✓</Text>}
                   </View>
                   <Text style={styles.rcTime}>{t}</Text>
-                </View>
+                </TouchableOpacity>
               );
             })}
           </View>
@@ -100,17 +212,18 @@ export default function LucidTrainerScreen() {
           })}
         </View>
 
-        {/* REM window — dark night gradient bar */}
+        {/* REM window */}
         <View style={styles.card}>
           <Text style={styles.sectionLabel}>TONIGHT'S REM WINDOW</Text>
-          <Text style={styles.cardSub}>Based on your last 14 dreams, REM peaks here.</Text>
+          <Text style={styles.cardSub}>
+            Based on {wakeTime ? `your ${fmt12h(wakeTime)} wake time` : 'typical sleep patterns'}, REM peaks here.
+          </Text>
           <View style={styles.remBar}>
             <LinearGradient
               colors={['#1c1733', '#4b3e94', '#1c1733']}
               start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }}
               style={StyleSheet.absoluteFill}
             />
-            {/* REM peak band */}
             <View style={styles.remPeak}>
               <LinearGradient
                 colors={['rgba(245,216,150,0.5)', 'rgba(245,216,150,0.15)']}
@@ -119,17 +232,21 @@ export default function LucidTrainerScreen() {
               />
             </View>
             <Text style={styles.remPeakLabel}>REM peak</Text>
-            <Text style={styles.remPeakTime}>4:18 AM</Text>
+            <Text style={styles.remPeakTime}>{remPeakTime}</Text>
             <Text style={styles.remStart}>11pm</Text>
-            <Text style={styles.remEnd}>7am</Text>
+            <Text style={styles.remEnd}>{wakeTime ? fmt12h(wakeTime) : '7am'}</Text>
           </View>
           <View style={{ height: 14 }} />
-          <TouchableOpacity style={styles.alarmBtn}>
-            <Text style={styles.alarmBtnText}>Set wake-back-to-bed alarm · 4:00 AM</Text>
+          <TouchableOpacity style={[styles.alarmBtn, alarmSet && styles.alarmBtnSet]} onPress={handleSetAlarm}>
+            <Text style={styles.alarmBtnText}>
+              {alarmSet
+                ? `✓ Alarm set · ${fmt12h(wbtbTime)}`
+                : `Set wake-back-to-bed alarm · ${fmt12h(wbtbTime)}`}
+            </Text>
           </TouchableOpacity>
         </View>
 
-        {/* Tonight's intention — dark card with gold serif text */}
+        {/* Tonight's intention */}
         <View style={styles.intentionCard}>
           <LinearGradient
             colors={['#2a2350', '#4b3e94']}
@@ -176,7 +293,7 @@ const styles = StyleSheet.create({
   },
   rcHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 16 },
   rcTitle: { fontSize: 16, fontWeight: '500', color: COLORS.ink },
-  rcSub: { fontSize: 13, color: COLORS.ink3, marginTop: 2 },
+  rcSub: { fontSize: 12, color: COLORS.ink3, marginTop: 2 },
   rcGrid: { flexDirection: 'row', gap: 6 },
   rcCell: { flex: 1, alignItems: 'center' },
   rcBox: {
@@ -211,7 +328,7 @@ const styles = StyleSheet.create({
     height: 56, borderRadius: 12, overflow: 'hidden', position: 'relative',
   },
   remPeak: {
-    position: 'absolute', left: '58%', width: '18%', top: 0, bottom: 0,
+    position: 'absolute', left: REM_PEAK_LEFT, width: REM_PEAK_WIDTH, top: 0, bottom: 0,
     overflow: 'hidden',
     borderLeftWidth: 1, borderRightWidth: 1, borderColor: '#f5d896',
   },
@@ -235,6 +352,7 @@ const styles = StyleSheet.create({
     height: 52, borderRadius: 26, backgroundColor: COLORS.ink,
     alignItems: 'center', justifyContent: 'center',
   },
+  alarmBtnSet: { backgroundColor: COLORS.moss ?? '#7ea98a' },
   alarmBtnText: { fontSize: 14, fontWeight: '600', color: '#f5d896' },
   intentionCard: {
     padding: 22, borderRadius: 20, alignItems: 'center',
