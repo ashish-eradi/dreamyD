@@ -2,7 +2,7 @@ import { getAdminClient } from '../../../lib/supabase';
 import SectionHeader from '../../../components/SectionHeader';
 import StatCard from '../../../components/StatCard';
 import ApiCostChart from './ApiCostChart';
-import { formatUSD } from '../../../lib/costs';
+import { formatINR, formatUSD } from '../../../lib/costs';
 import { format, startOfMonth, subMonths } from 'date-fns';
 
 async function fetchApiCosts() {
@@ -67,10 +67,10 @@ export default async function ApiCostsPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Total spend (MTD)"   value={formatUSD(d.total)}       color="amber" trend={trend} />
+        <StatCard label="Total spend (MTD)"   value={formatINR(d.total)}       color="amber" trend={trend} sub={formatUSD(d.total)} />
         <StatCard label="API calls"            value={d.callCount.toLocaleString()} color="default" />
-        <StatCard label="Avg cost / call"      value={formatUSD(d.avgPerCall)}  color="default" />
-        <StatCard label="Last month"           value={formatUSD(d.totLast)}     color="default" />
+        <StatCard label="Avg cost / call"      value={formatINR(d.avgPerCall)}  color="default" sub={formatUSD(d.avgPerCall)} />
+        <StatCard label="Last month"           value={formatINR(d.totLast)}     color="default" sub={formatUSD(d.totLast)} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
@@ -101,7 +101,7 @@ export default async function ApiCostsPage() {
                 <tr key={s.service} className="border-b border-gray-50 hover:bg-gray-50">
                   <td className="px-5 py-3 font-medium text-gray-800">{s.service}</td>
                   <td className="px-5 py-3 text-right text-gray-500">{s.calls}</td>
-                  <td className="px-5 py-3 text-right font-mono text-xs text-gray-700">{formatUSD(s.total)}</td>
+                  <td className="px-5 py-3 text-right font-mono text-xs text-gray-700">{formatINR(s.total)}</td>
                   <td className="px-5 py-3 text-right text-gray-400 text-xs">
                     {d.total > 0 ? ((s.total / d.total) * 100).toFixed(1) : 0}%
                   </td>
@@ -131,7 +131,7 @@ export default async function ApiCostsPage() {
                   <td className="px-5 py-3 font-mono text-xs text-gray-600">
                     #{i+1} {u.id.slice(0, 8)}…
                   </td>
-                  <td className="px-5 py-3 text-right font-mono text-xs text-gray-700">{formatUSD(u.cost)}</td>
+                  <td className="px-5 py-3 text-right font-mono text-xs text-gray-700">{formatINR(u.cost)}</td>
                 </tr>
               ))}
             </tbody>

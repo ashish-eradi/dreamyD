@@ -3,7 +3,7 @@ import SectionHeader from '../../../components/SectionHeader';
 import StatCard from '../../../components/StatCard';
 import RevenueChart from './RevenueChart';
 import AddPaymentForm from './AddPaymentForm';
-import { formatUSD, formatINR } from '../../../lib/costs';
+import { formatINR, formatUSD } from '../../../lib/costs';
 import { format, startOfMonth, subMonths, parseISO } from 'date-fns';
 
 async function fetchRevenue() {
@@ -51,10 +51,10 @@ export default async function RevenuePage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Revenue (MTD)"   value={formatUSD(d.mtdTotal)}  color="green" trend={d.trend} sub={formatINR(d.mtdTotal)} />
-        <StatCard label="All-time revenue" value={formatUSD(d.allTime)}   color="green" sub={formatINR(d.allTime)} />
+        <StatCard label="Revenue (MTD)"   value={formatINR(d.mtdTotal)}  color="green" trend={d.trend} sub={formatUSD(d.mtdTotal)} />
+        <StatCard label="All-time revenue" value={formatINR(d.allTime)}   color="green" sub={formatUSD(d.allTime)} />
         <StatCard label="Premium users"    value={d.totalPremium}         color="purple" />
-        <StatCard label="Est. MRR"         value={formatUSD(d.mrr)}       color="purple" sub="premium users × ₹179" />
+        <StatCard label="Est. MRR"         value={formatINR(d.mrr)}       color="purple" sub="premium users × ₹179" />
       </div>
 
       {/* 6-month chart */}
@@ -89,7 +89,7 @@ export default async function RevenuePage() {
                 </td>
                 <td className="px-5 py-3 text-gray-500 text-xs">{p.source}</td>
                 <td className="px-5 py-3 text-gray-400 text-xs">{p.notes || '—'}</td>
-                <td className="px-5 py-3 text-right font-semibold text-emerald-600">{formatUSD(p.amount_usd)}</td>
+                <td className="px-5 py-3 text-right font-semibold text-emerald-600">{formatINR(p.amount_usd)}</td>
               </tr>
             ))}
           </tbody>

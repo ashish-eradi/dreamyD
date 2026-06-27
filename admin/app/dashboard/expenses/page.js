@@ -2,7 +2,7 @@ import { getAdminClient } from '../../../lib/supabase';
 import SectionHeader from '../../../components/SectionHeader';
 import StatCard from '../../../components/StatCard';
 import AddExpenseForm from './AddExpenseForm';
-import { formatUSD, formatINR } from '../../../lib/costs';
+import { formatINR, formatUSD } from '../../../lib/costs';
 import { format, startOfMonth, subMonths } from 'date-fns';
 
 async function fetchExpenses() {
@@ -39,9 +39,9 @@ export default async function ExpensesPage() {
       />
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard label="This month"   value={formatUSD(d.mtd)}  color="amber" trend={d.trend} sub={formatINR(d.mtd)} />
-        <StatCard label="Last month"   value={formatUSD(d.last)} color="default" />
-        <StatCard label="YTD total"    value={formatUSD(d.rows.reduce((s, r) => s + Number(r.amount_usd), 0))} color="default" />
+        <StatCard label="This month"   value={formatINR(d.mtd)}  color="amber" trend={d.trend} sub={formatUSD(d.mtd)} />
+        <StatCard label="Last month"   value={formatINR(d.last)} color="default" sub={formatUSD(d.last)} />
+        <StatCard label="YTD total"    value={formatINR(d.rows.reduce((s, r) => s + Number(r.amount_usd), 0))} color="default" />
         <StatCard label="Services"     value={Object.keys(Object.fromEntries(d.rows.map(r => [r.service, 1]))).length} color="default" />
       </div>
 
@@ -59,7 +59,7 @@ export default async function ExpensesPage() {
                 <div className="flex-1">
                   <div className="flex justify-between text-sm mb-1">
                     <span className="font-medium text-gray-700">{svc}</span>
-                    <span className="text-gray-500">{formatUSD(amt)}</span>
+                    <span className="text-gray-500">{formatINR(amt)}</span>
                   </div>
                   <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
                     <div
@@ -99,7 +99,7 @@ export default async function ExpensesPage() {
                     <span className="text-xs bg-amber-50 text-amber-700 px-2 py-0.5 rounded-full font-medium">{r.service}</span>
                   </td>
                   <td className="px-5 py-3 text-gray-400 text-xs">{r.notes || '—'}</td>
-                  <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatUSD(r.amount_usd)}</td>
+                  <td className="px-5 py-3 text-right font-semibold text-gray-800">{formatINR(r.amount_usd)}</td>
                 </tr>
               ))}
             </tbody>
