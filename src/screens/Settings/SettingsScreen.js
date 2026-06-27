@@ -368,7 +368,7 @@ export default function SettingsScreen() {
         {/* ── 3-column stat row ── */}
         <View style={styles.statRow}>
           <StatCard value={monthDreams.length} label="Dreams" />
-          <StatCard value={0} label="Lucid" />
+          <StatCard value={monthDreams.filter(d => d.is_lucid).length} label="Lucid" />
           <StatCard
             value={monthDreams.length > 0 ? `${Math.round((monthDreams.length / 30) * 100)}%` : '—'}
             label="Recalled"

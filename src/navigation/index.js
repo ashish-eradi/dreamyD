@@ -187,8 +187,8 @@ function OnboardingNavigator() {
 
 // ─── Root navigator ──────────────────────────────────────────────────────────
 function RootNavigator() {
-  const user               = useStore(s => s.user);
-  const needsPasswordReset = useStore(s => s.needsPasswordReset);
+  const user               = useDreamStore(s => s.user);
+  const needsPasswordReset = useDreamStore(s => s.needsPasswordReset);
 
   if (!user?.id) {
     return <OnboardingNavigator />;

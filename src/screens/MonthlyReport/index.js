@@ -153,7 +153,7 @@ export default function MonthlyReportScreen() {
         <View style={styles.statsRow}>
           {[
             { v: totalEntries, l: 'Entries', c: COLORS.ink },
-            { v: 0, l: 'Lucid', c: COLORS.peach },
+            { v: monthDreams.filter(d => d.is_lucid).length, l: 'Lucid', c: COLORS.peach },
             { v: totalEntries > 0 ? Math.round((totalEntries / 30) * 100) + '%' : '—', l: 'Recall', c: COLORS.moss },
           ].map(s => (
             <View key={s.l} style={[styles.statCard]}>
